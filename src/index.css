@@ -1,0 +1,381 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 19px;
+  }
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 12%;
+
+    --primary: 232 75% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 25% 94%;
+    --secondary-foreground: 220 30% 20%;
+
+    --muted: 220 15% 94%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 45 100% 50%;
+    --accent-foreground: 220 30% 12%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 89%;
+    --input: 220 15% 89%;
+    --ring: 232 75% 30%;
+
+    --radius: 0.875rem;
+
+    --success: 155 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 40 95% 55%;
+    --warning-foreground: 30 80% 20%;
+
+    --gradient-hero: linear-gradient(135deg, hsl(232 75% 28%), hsl(232 75% 35%), hsl(220 65% 40%));
+    --gradient-accent: linear-gradient(135deg, hsl(45 100% 50%), hsl(40 100% 55%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 20% 97%));
+    --shadow-card: 0 4px 20px -4px hsl(220 40% 30% / 0.08);
+    --shadow-elevated: 0 12px 36px -8px hsl(220 40% 30% / 0.13);
+
+    --sidebar-background: 220 10% 98%;
+    --sidebar-foreground: 220 10% 26%;
+    --sidebar-primary: 232 75% 30%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 15% 95%;
+    --sidebar-accent-foreground: 232 40% 15%;
+    --sidebar-border: 220 12% 90%;
+    --sidebar-ring: 232 75% 30%;
+  }
+
+  .dark {
+    --background: 220 20% 7%;
+    --foreground: 220 15% 95%;
+    --card: 220 18% 11%;
+    --card-foreground: 220 15% 95%;
+    --popover: 220 18% 11%;
+    --popover-foreground: 220 15% 95%;
+    --primary: 232 75% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 15%;
+    --secondary-foreground: 220 15% 90%;
+    --muted: 220 18% 15%;
+    --muted-foreground: 220 12% 58%;
+    --accent: 45 100% 55%;
+    --accent-foreground: 220 30% 12%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 232 75% 45%;
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 220 10% 95%;
+    --sidebar-primary: 232 75% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 220 10% 95%;
+    --sidebar-border: 220 12% 16%;
+    --sidebar-ring: 232 75% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  ::selection {
+    background: hsl(232 75% 30% / 0.25);
+    color: hsl(220 30% 12%);
+  }
+
+  /* Global hover affordance for interactive elements */
+  button,
+  [role="button"],
+  a {
+    transition: box-shadow 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+    will-change: box-shadow, filter, transform;
+  }
+
+  button:not(:disabled):hover,
+  [role="button"]:hover,
+  a:hover {
+    box-shadow: 0 12px 30px -14px hsl(232 75% 30% / 0.25);
+    filter: brightness(1.04);
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:active,
+  a:active {
+    transform: translateY(1px);
+    box-shadow: 0 6px 16px -10px hsl(232 75% 30% / 0.25);
+  }
+}
+
+/* ===== Custom Keyframe Animations ===== */
+
+@keyframes float-particle {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-100vh) scale(0.5);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes road-dash {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 40px 0;
+  }
+}
+
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px hsl(45 100% 50% / 0.3), 0 0 16px hsl(232 75% 30% / 0.15);
+  }
+
+  50% {
+    box-shadow: 0 0 16px hsl(45 100% 50% / 0.5), 0 0 32px hsl(232 75% 30% / 0.25);
+  }
+}
+
+@keyframes nav-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes bounce-soft {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes float-up-down {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+@keyframes gradient-sweep {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ripple-rings {
+  0%   { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes slide-up-fade {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes text-flicker {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@layer utilities {
+  .text-gradient-hero {
+    background: var(--gradient-hero);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-accent {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .bg-gradient-accent {
+    background: var(--gradient-accent);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .animate-float-particle {
+    animation: float-particle linear infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    background-size: 200% auto;
+    animation: shimmer 3s linear infinite;
+  }
+
+  .road-dashes {
+    background: repeating-linear-gradient(90deg,
+        hsl(232 75% 30% / 0.4) 0px,
+        hsl(232 75% 30% / 0.4) 12px,
+        transparent 12px,
+        transparent 24px);
+    animation: road-dash 0.8s linear infinite;
+  }
+
+  .road-dashes-yellow {
+    background: repeating-linear-gradient(90deg,
+        #FFD700 0px,
+        #FFD700 14px,
+        transparent 14px,
+        transparent 28px);
+    animation: road-dash 0.5s linear infinite;
+  }
+
+  .animate-glow-pulse {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+
+  .animate-nav-glow {
+    animation: nav-glow 3s ease-in-out infinite;
+  }
+
+  .animate-bounce-soft {
+    animation: bounce-soft 2s ease-in-out infinite;
+  }
+
+  .animate-float {
+    animation: float-up-down 3.5s ease-in-out infinite;
+  }
+
+  .animate-gradient-sweep {
+    background-size: 200% 200%;
+    animation: gradient-sweep 5s ease infinite;
+  }
+
+  .animate-ripple {
+    animation: ripple-rings 1.5s ease-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up-fade 0.5s ease-out both;
+  }
+
+  .animate-spin-slow {
+    animation: spin-slow 12s linear infinite;
+  }
+
+  .card-hover {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 40px -12px hsl(220 40% 30% / 0.15);
+  }
+
+  .input-focus-glow:focus {
+    box-shadow: 0 0 0 3px hsl(232 75% 30% / 0.15), 0 0 20px hsl(232 75% 30% / 0.1);
+  }
+
+  /* Mobile: remove tap highlight */
+  .tap-no-highlight {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}

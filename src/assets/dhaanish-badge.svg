@@ -1,0 +1,34 @@
+<svg width="520" height="130" viewBox="0 0 520 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Dhaanish Chennai Badge</title>
+  <desc id="desc">Dhaanish Chennai logo with accreditation text</desc>
+  <style>
+    .blue { fill: #0c2c76; }
+    .gold { fill: #f6c200; }
+    .red { fill: #be1e2d; }
+    .text-blue { fill: #0c2c76; font-family: 'Arial', sans-serif; font-weight: 800; }
+    .text-red { fill: #be1e2d; font-family: 'Arial', sans-serif; font-weight: 800; }
+    .text-gold { fill: #111; font-family: 'Arial', sans-serif; font-weight: 800; }
+  </style>
+
+  <!-- Left block -->
+  <rect x="0.5" y="0.5" width="250" height="129" fill="#fff" stroke="#0c2c76" stroke-width="1" rx="6"/>
+  <rect x="14" y="16" width="60" height="60" rx="10" class="blue"/>
+  <text x="44" y="60" text-anchor="middle" font-size="32" fill="#fff" font-family="Arial Black, Arial" font-weight="900">DC</text>
+
+  <text x="90" y="44" class="text-blue" font-size="22">DHAANISH</text>
+  <text x="90" y="70" class="text-blue" font-size="18" letter-spacing="2">CHENNAI</text>
+
+  <text x="20" y="94" class="text-red" font-size="13" letter-spacing="1.5">AUTONOMOUS   |   NAAC A+</text>
+
+  <rect x="14" y="100" width="222" height="22" rx="3" class="gold"/>
+  <text x="125" y="116" class="text-gold" font-size="13" text-anchor="middle">ANNA UNIVERSITY | AICTE Approved</text>
+
+  <!-- Divider -->
+  <rect x="258" y="10" width="2" height="110" class="blue" />
+
+  <!-- Right text -->
+  <text x="276" y="38" class="text-blue" font-size="15">An Autonomous Institution,</text>
+  <text x="276" y="58" class="text-blue" font-size="15">NAAC A+ | 4 Star India Rating</text>
+  <text x="276" y="78" class="text-blue" font-size="15">5th Rank in Tamil Nadu</text>
+  <text x="276" y="98" class="text-blue" font-size="15">An ISO 9001:2015 Certified</text>
+</svg>
