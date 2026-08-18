@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Home, LogOut } from "lucide-react";
+import { Menu, X, Home, LogIn } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { publicAsset } from "@/lib/publicAsset";
 
@@ -32,7 +32,7 @@ export default function Navbar() {
     return () => clearInterval(id);
   }, []);
 
-  const isLogin = location.pathname === "/login" || location.pathname === "/";
+  const isLogin = location.pathname === "/login";
 
   return (
     <motion.nav
@@ -53,7 +53,7 @@ export default function Navbar() {
       >
         {/* Left: Main Logo */}
         <Link
-          to={isLogin ? "/login" : "/home"}
+          to={isLogin ? "/login" : "/"}
           className="flex items-center justify-self-start gap-2"
           aria-label="Home"
         >
@@ -69,7 +69,7 @@ export default function Navbar() {
               whileTap={{ scale: 0.95 }}
             >
                 <Link
-                  to="/home"
+                  to="/"
                   className="inline-flex min-w-[90px] items-center justify-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-bold shadow-lg transition-all hover:shadow-xl whitespace-nowrap text-center"
                   style={{
                     background: "linear-gradient(135deg, #FFD700, #FFC107)",
@@ -107,16 +107,21 @@ export default function Navbar() {
           </div>
         )}
 
-        {/* Right: Search + Logout + Mobile toggle (hidden on login for desktop) */}
+        {/* Right: Login + Mobile toggle */}
         <div className="flex items-center justify-self-end gap-2">
           {!isLogin && (
             <>
-                  <Link
+              <Link
                 to="/login"
-                className="hidden md:inline-flex items-center justify-center rounded-full border border-border bg-white px-2 py-1 text-primary shadow-sm transition hover:-translate-y-[1px]"
-                title="Log out"
+                className="hidden md:inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold shadow-lg transition-all hover:shadow-xl hover:-translate-y-[1px] whitespace-nowrap"
+                style={{
+                  background: "linear-gradient(135deg, #FFD700, #FFC107)",
+                  color: "#1a237e",
+                  border: "2px solid rgba(26, 35, 126, 0.15)",
+                }}
               >
-                <LogOut className="h-3 w-3" />
+                <LogIn className="h-3.5 w-3.5" />
+                Login
               </Link>
               <div className="hidden md:flex flex-col items-center text-[9px] font-semibold text-muted-foreground leading-tight">
                 <span>{now.toLocaleDateString()}</span>
@@ -131,10 +136,15 @@ export default function Navbar() {
               </motion.button>
               <Link
                 to="/login"
-                className="md:hidden rounded-full border border-border bg-white p-2 text-primary shadow-sm transition hover:-translate-y-[1px]"
-                title="Log out"
+                className="md:hidden inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-bold shadow-lg transition-all whitespace-nowrap"
+                style={{
+                  background: "linear-gradient(135deg, #FFD700, #FFC107)",
+                  color: "#1a237e",
+                  border: "2px solid rgba(26, 35, 126, 0.15)",
+                }}
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogIn className="h-3.5 w-3.5" />
+                Login
               </Link>
               <div className="md:hidden flex flex-col items-center text-[9px] font-semibold text-muted-foreground leading-tight">
                 <span>{now.toLocaleDateString()}</span>
@@ -156,7 +166,7 @@ export default function Navbar() {
             className="overflow-hidden border-t border-border bg-card md:hidden"
           >
             <div className="flex flex-col gap-1 p-3">
-              {[{ label: "🏠 Home", path: "/home" }, ...navItems].map((item, i) => (
+              {[{ label: "🏠 Home", path: "/" }, ...navItems].map((item, i) => (
                 <motion.div
                   key={item.path}
                   initial={{ opacity: 0, x: -20 }}
@@ -186,10 +196,11 @@ export default function Navbar() {
                 <Link
                   to="/login"
                   onClick={() => setOpen(false)}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-secondary"
+                  className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-[#1a237e] hover:bg-secondary"
+                  style={{ background: "linear-gradient(135deg, #FFD700, #FFC107)" }}
                 >
-                  <LogOut className="h-4 w-4" />
-                  Logout
+                  <LogIn className="h-4 w-4" />
+                  Login
                 </Link>
               </motion.div>
             </div>

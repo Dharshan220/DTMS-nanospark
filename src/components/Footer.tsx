@@ -46,7 +46,7 @@ export default function Footer() {
             <h4 className="mb-3 text-sm font-semibold text-white">Quick Links</h4>
             <ul className="space-y-2 text-sm text-white/70">
               {[
-                { href: "/home", label: "Home" },
+                { href: "/", label: "Home" },
                 { href: "/routes", label: "Bus Routes" },
                 { href: "/safety", label: "Safety Rules" },
                 { href: "/feedback", label: "Student Feedback" },

@@ -43,11 +43,36 @@ router.put("/profile", requireAuth(), asyncHandler(async (req, res) => {
   const users = collection("users");
   const user = users.find((u) => u.id === req.auth.sub);
   if (!user) return res.status(404).json({ message: "User not found" });
-  const { name, phone, photoUrl, boardingStop } = req.body;
-  if (name !== undefined) user.name = String(name).trim() || user.name;
-  if (phone !== undefined) user.phone = String(phone).trim();
+  const { name, phone, photoUrl, rollNo, department, year, section, routeNumber, boardingStop } = req.body;
+
+  // Students may fill their transport profile only while it is incomplete
+  // (first-time setup). Once every required field is set, the profile is
+  // locked and only an admin/faculty can update it (PUT /users/:id/transport).
+  if (user.role === "student") {
+    const required = ["name", "rollNo", "phone", "routeNumber", "boardingStop"];
+    const complete = required.every(
+      (field) => user[field] != null && String(user[field]).trim() !== ""
+    );
+    if (complete) {
+      const locked = ["name", "rollNo", "phone", "routeNumber", "boardingStop"];
+      if (locked.some((field) => req.body[field] !== undefined)) {
+        return res.status(400).json({
+          message:
+            "Your transport profile is locked after first-time setup. Contact the transport office (admin/faculty) to update it.",
+        });
+      }
+    }
+  }
+
+  if (name !== undefined && String(name).trim()) user.name = String(name).trim();
+  if (phone !== undefined) user.phone = String(phone).trim() || null;
   if (photoUrl !== undefined) user.photoUrl = photoUrl;
-  if (boardingStop !== undefined) user.boardingStop = boardingStop;
+  if (rollNo !== undefined) user.rollNo = String(rollNo).trim() || null;
+  if (department !== undefined) user.department = department || null;
+  if (year !== undefined) user.year = year || null;
+  if (section !== undefined) user.section = section || null;
+  if (routeNumber !== undefined && routeNumber !== "" && routeNumber != null) user.routeNumber = Number(routeNumber);
+  if (boardingStop !== undefined && String(boardingStop).trim()) user.boardingStop = String(boardingStop).trim();
   save();
   res.json({ user: publicUser(user) });
 }));

@@ -113,6 +113,39 @@ router.put("/:id", requireAdmin(), asyncHandler(async (req, res) => {
   res.json({ user: publicUser(user) });
 }));
 
+/**
+ * Admin/faculty-only: update a student's transport profile after their
+ * first-time setup locked it. Teachers may only edit students on their own route.
+ */
+router.put("/:id/transport", requireAuth(), asyncHandler(async (req, res) => {
+  const users = collection("users");
+  const user = users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (user.role !== "student") {
+    return res.status(400).json({ message: "Transport profile is only available for students" });
+  }
+  if (req.auth.role === "teacher") {
+    const teacher = users.find((t) => t.id === req.auth.sub);
+    const teacherRoute = teacher ? teacher.routeNumber : null;
+    if (teacherRoute == null || user.routeNumber !== teacherRoute) {
+      return res.status(403).json({ message: "You can only update students on your assigned route" });
+    }
+  } else if (req.auth.role !== "admin") {
+    return res.status(403).json({ message: "Only admin or faculty can update student transport profiles" });
+  }
+  const { name, phone, rollNo, department, year, section, routeNumber, boardingStop } = req.body;
+  if (name !== undefined && req.auth.role === "admin") user.name = String(name).trim();
+  if (phone !== undefined) user.phone = String(phone).trim() || null;
+  if (rollNo !== undefined) user.rollNo = String(rollNo).trim() || null;
+  if (department !== undefined) user.department = department || null;
+  if (year !== undefined) user.year = year || null;
+  if (section !== undefined) user.section = section || null;
+  if (routeNumber !== undefined && routeNumber !== "" && routeNumber != null) user.routeNumber = Number(routeNumber);
+  if (boardingStop !== undefined && String(boardingStop).trim()) user.boardingStop = String(boardingStop).trim();
+  save();
+  res.json({ user: publicUser(user) });
+}));
+
 router.delete("/:id", requireAdmin(), asyncHandler(async (req, res) => {
   const users = collection("users");
   const idx = users.findIndex((u) => u.id === req.params.id);

@@ -44,7 +44,7 @@ export default function LoginPage() {
         localStorage.setItem("dace_google_name", userInfo.name || "");
         localStorage.setItem("dace_google_email", userInfo.email || "");
         localStorage.setItem("dace_google_picture", userInfo.picture || "");
-        navigate("/home");
+        navigate("/");
       } catch {
         setGoogleError("Failed to get user info. Please try again.");
       }

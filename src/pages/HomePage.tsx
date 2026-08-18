@@ -40,7 +40,7 @@ const galleryImages = [
 ];
 
 const homeQuickLinks = [
-  { label: "Home", path: "/home" },
+  { label: "Home", path: "/" },
   { label: "Bus Routes", path: "/routes" },
   { label: "Safety Rules", path: "/safety" },
   { label: "Feedback", path: "/feedback" },
@@ -579,7 +579,7 @@ export default function HomePage() {
           </motion.p>
           <div className="flex flex-wrap justify-center gap-4">
             {[
-              { label: "🏠 Home", path: "/home" },
+              { label: "🏠 Home", path: "/" },
               { label: "🌐 Bus Routes", path: "/routes" },
               { label: "🛡️ Safety Rules", path: "/safety" },
               { label: "💬 Feedback", path: "/feedback" },

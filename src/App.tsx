@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Outlet } from "react-router-dom";
 import { AnimatePresence, cubicBezier, motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -20,13 +20,15 @@ import LoginPage from "@/pages/LoginPage";
 import ChatBot from "@/components/ChatBot";
 import ScrollUpButton from "@/components/ScrollUpButton";
 import MagicCursor from "@/components/MagicCursor";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import RequireRole from "@/components/RequireRole";
 import StudentLayout from "@/components/student/StudentLayout";
 import StudentDashboardPage from "@/pages/student/StudentDashboardPage";
 import StudentTransportPage from "@/pages/student/StudentTransportPage";
 import StudentComplaintsPage from "@/pages/student/StudentComplaintsPage";
 import StudentNotificationsPage from "@/pages/student/StudentNotificationsPage";
+import StudentProfileSetupPage from "@/pages/student/StudentProfileSetupPage";
+import { studentProfileComplete } from "@/lib/faculty";
 import FacultyLayout from "@/components/faculty/FacultyLayout";
 import FacultyDashboardPage from "@/pages/faculty/FacultyDashboardPage";
 import MyBusPage from "@/pages/faculty/MyBusPage";
@@ -86,12 +88,23 @@ const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   </motion.div>
 );
 
+/** Student panel wrapper — first-time profile setup blocks the panel until completed. */
+const StudentPanel = () => {
+  const { user } = useAuth();
+  const incomplete = !studentProfileComplete(user);
+  return (
+    <StudentLayout>
+      {incomplete ? <StudentProfileSetupPage /> : <Outlet />}
+    </StudentLayout>
+  );
+};
+
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<PageWrapper><LoginPage /></PageWrapper>} />
+        <Route path="/" element={<PageWrapper><HomePage /></PageWrapper>} />
         <Route path="/home" element={<PageWrapper><HomePage /></PageWrapper>} />
         <Route path="/routes" element={<PageWrapper><BusRoutesPage /></PageWrapper>} />
         <Route path="/safety" element={<PageWrapper><SafetyPage /></PageWrapper>} />
@@ -106,7 +119,7 @@ const AnimatedRoutes = () => {
           path="/student"
           element={
             <RequireRole roles={["student"]}>
-              <StudentLayout />
+              <StudentPanel />
             </RequireRole>
           }
         >

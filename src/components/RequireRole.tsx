@@ -28,7 +28,7 @@ export default function RequireRole({ roles, children }: { roles: ServerRole[]; 
     if (user.role === "student" && location.pathname.startsWith("/faculty")) {
       return <Navigate to="/student" replace />;
     }
-    return <Navigate to={user.role === "student" ? "/student" : "/home"} replace />;
+    return <Navigate to={user.role === "student" ? "/student" : "/"} replace />;
   }
 
   return <>{children}</>;

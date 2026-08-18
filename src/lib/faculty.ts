@@ -22,6 +22,29 @@ export function serverRoleFor(role: LoginRole): AuthUser["role"] {
   return "student";
 }
 
+/** Required fields for a student's first-time transport profile. */
+export const STUDENT_PROFILE_FIELDS = [
+  "name",
+  "rollNo",
+  "phone",
+  "routeNumber",
+  "boardingStop",
+] as const;
+
+/** True once the student has completed first-time setup (all required fields set). */
+export function studentProfileComplete(
+  user: Pick<AuthUser, "name" | "rollNo" | "phone" | "routeNumber" | "boardingStop"> | null
+): boolean {
+  if (!user) return false;
+  return (
+    Boolean(user.name?.trim()) &&
+    Boolean(user.rollNo?.trim()) &&
+    Boolean(user.phone?.trim()) &&
+    user.routeNumber != null &&
+    Boolean(user.boardingStop?.trim())
+  );
+}
+
 /** "6:20 AM" → minutes since midnight. */
 export function timeToMinutes(time: string): number {
   const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(time).trim());

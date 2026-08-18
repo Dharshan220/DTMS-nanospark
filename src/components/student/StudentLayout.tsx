@@ -149,7 +149,7 @@ function AppSidebar() {
   );
 }
 
-export default function StudentLayout() {
+export default function StudentLayout({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -226,7 +226,7 @@ export default function StudentLayout() {
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto w-full max-w-6xl space-y-6">
-            <Outlet />
+            {children ?? <Outlet />}
           </div>
         </main>
         <footer className="border-t px-6 py-3 text-center text-[11px] text-muted-foreground">
