@@ -2,13 +2,24 @@
  * DTMS - JSON file database with in-memory cache + debounced persistence.
  */
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const DB_FILE = path.join(__dirname, "db.json");
+/**
+ * On Vercel the function bundle directory is read-only, so writes must go to
+ * the writable /tmp directory. Locally the DB file stays in server/api.
+ */
+const IS_SERVERLESS = process.env.VERCEL === "1";
+
+export const DB_FILE = IS_SERVERLESS
+  ? path.join(os.tmpdir(), "dtms-db.json")
+  : path.join(__dirname, "db.json");
+
+const BUNDLE_DB_FILE = path.join(__dirname, "db.json");
 
 const state = {
   data: null,
@@ -17,17 +28,19 @@ const state = {
 };
 
 export async function createDb(seed) {
-  try {
-    const raw = await fs.readFile(DB_FILE, "utf8");
-    state.data = JSON.parse(raw);
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      state.data = seed();
-      await flush();
-    } else {
-      throw err;
+  for (const file of [DB_FILE, BUNDLE_DB_FILE]) {
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      state.data = JSON.parse(raw);
+      // When loaded from the read-only bundle, copy it to the writable file
+      if (file !== DB_FILE) await flush();
+      return;
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
     }
   }
+  state.data = seed();
+  await flush();
 }
 
 export function db() {
@@ -42,7 +55,13 @@ export function save() {
     state.writeTimer = null;
     const pending = state.writePending;
     state.writePending = false;
-    if (pending) await flush();
+    if (pending) {
+      try {
+        await flush();
+      } catch (err) {
+        console.error("DB flush failed:", err);
+      }
+    }
   }, 150);
 }
 

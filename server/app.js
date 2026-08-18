@@ -137,7 +137,11 @@ app.use((err, _req, res, _next) => {
 app.use("/api", (_req, res) => res.status(404).json({ message: "API endpoint not found" }));
 
 export async function startServer() {
-  await fs.mkdir(uploadDir, { recursive: true });
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+  } catch {
+    // uploads dir may be unavailable in serverless (read-only) environments
+  }
   await createDb(buildSeed);
   return app;
 }

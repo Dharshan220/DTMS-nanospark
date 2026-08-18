@@ -79,6 +79,7 @@ router.get("/", requireAuth(), asyncHandler(async (req, res) => {
       adminName: me.name || "Super Admin",
       unread: notifications.filter((n) => n.userId === req.auth.sub && !n.read).length,
     });
+    return;
   }
 
   const me = users.find((u) => u.id === req.auth.sub);
