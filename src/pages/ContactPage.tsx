@@ -16,8 +16,8 @@ const cardVariants = {
 };
 
 const contactItems = [
-  { icon: User, title: "Transport Head", text: "Muthukrishan", href: undefined, color: "#1a237e" },
-  { icon: Users, title: "Coordinator", text: "Please contact the Transport Office for coordinator details.", href: "tel:+919962022222", color: "#0ea5e9" },
+  { icon: User, title: "Transport Incharge", text: "Mr. Malaiya Perumal — 7845384212", href: "tel:+917845384212", color: "#1a237e" },
+  { icon: Users, title: "Transport Incharge", text: "Mr. Manikavel — 9787693596", href: "tel:+919787693596", color: "#0ea5e9" },
   { icon: MapPin, title: "Address", text: "Dhaanish Nagar, Vanchuvancherry, Padappai (Near Tambaram), Sriperumbudur Taluk, Kancheepuram District - 601 301", href: undefined, color: "#ef4444" },
   { icon: Phone, title: "Phone", text: "+91 9962022222", href: "tel:+919962022222", color: "#22c55e" },
   { icon: Mail, title: "Email", text: "info@dhaanishcollege.co.in", href: "mailto:info@dhaanishcollege.co.in", color: "#3b82f6" },
