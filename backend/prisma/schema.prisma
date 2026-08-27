@@ -45,6 +45,11 @@ enum AssignmentStatus {
   INACTIVE
 }
 
+enum TripType {
+  MORNING
+  EVENING
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -101,6 +106,7 @@ model Faculty {
 
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   transportAssignment FacultyBusAssignment?
+  attendances         Attendance[]
 
   @@index([userId])
   @@index([facultyId])
@@ -149,6 +155,7 @@ model Bus {
   route              Route?                 @relation(fields: [routeId], references: [id], onDelete: SetNull)
   studentAssignments StudentBusAssignment[]
   facultyAssignments FacultyBusAssignment[]
+  attendances        Attendance[]
 
   @@index([busNumber])
   @@index([registrationNumber])
@@ -252,4 +259,27 @@ model FacultyBusAssignment {
   @@index([busId])
   @@index([status])
   @@map("faculty_bus_assignments")
+}
+
+model Attendance {
+  id         String   @id @default(uuid())
+  busId      String   @map("bus_id")
+  facultyId  String   @map("faculty_id")
+  date       DateTime @map("date")
+  tripType   TripType @map("trip_type")
+  boysCount  Int      @default(0) @map("boys_count")
+  girlsCount Int      @default(0) @map("girls_count")
+  totalCount Int      @default(0) @map("total_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  bus    Bus    @relation(fields: [busId], references: [id], onDelete: Cascade)
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@unique([busId, date, tripType])
+  @@index([busId])
+  @@index([facultyId])
+  @@index([date])
+  @@index([tripType])
+  @@map("attendance")
 }
