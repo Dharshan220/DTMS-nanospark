@@ -18,6 +18,11 @@ enum UserStatus {
   INACTIVE
 }
 
+enum ProfileStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -28,7 +33,54 @@ model User {
   updatedAt    DateTime   @updatedAt @map("updated_at")
   lastLoginAt  DateTime?  @map("last_login_at")
 
+  student  Student?
+  faculty  Faculty?
+
   @@index([email])
   @@index([role])
   @@map("users")
+}
+
+model Student {
+  id              String        @id @default(uuid())
+  userId          String        @unique @map("user_id")
+  registerNumber  String        @unique @map("register_number")
+  name            String
+  phone           String?
+  department      String?
+  year            String?
+  section         String?
+  gender          String?
+  status          ProfileStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([registerNumber])
+  @@index([name])
+  @@index([department])
+  @@map("students")
+}
+
+model Faculty {
+  id         String        @id @default(uuid())
+  userId     String        @unique @map("user_id")
+  facultyId  String        @unique @map("faculty_id")
+  name       String
+  phone      String?
+  department String?
+  designation String?
+  status     ProfileStatus @default(ACTIVE)
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([facultyId])
+  @@index([name])
+  @@index([department])
+  @@map("faculty")
 }
