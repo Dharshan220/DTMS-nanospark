@@ -14,6 +14,7 @@ import { TransportAssignmentsModule } from './transport-assignments/transport-as
 import { AttendanceModule } from './attendance/attendance.module';
 import { ComplaintsModule } from './complaints/complaints.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { EmergencyModule } from './emergency/emergency.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     AttendanceModule,
     ComplaintsModule,
     FeedbackModule,
+    EmergencyModule,
     HealthModule,
   ],
 })

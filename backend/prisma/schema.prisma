@@ -89,6 +89,29 @@ enum FeedbackStatus {
   RESOLVED
 }
 
+enum EmergencyType {
+  MEDICAL
+  ACCIDENT
+  SAFETY
+  BREAKDOWN
+  HARASSMENT
+  SECURITY
+  OTHER
+}
+
+enum EmergencyPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+}
+
+enum EmergencyStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -101,6 +124,7 @@ model User {
 
   student  Student?
   faculty  Faculty?
+  emergencyAlerts EmergencyAlert[]
 
   @@index([email])
   @@index([role])
@@ -125,6 +149,7 @@ model Student {
   transportAssignment StudentBusAssignment?
   complaints          Complaint[]
   feedback            Feedback[]
+  emergencyAlerts     EmergencyAlert[]
 
   @@index([userId])
   @@index([registerNumber])
@@ -148,6 +173,7 @@ model Faculty {
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   transportAssignment FacultyBusAssignment?
   attendances         Attendance[]
+  emergencyAlerts     EmergencyAlert[]
 
   @@index([userId])
   @@index([facultyId])
@@ -199,6 +225,7 @@ model Bus {
   facultyAssignments FacultyBusAssignment[]
   attendances        Attendance[]
   complaints         Complaint[]
+  emergencyAlerts    EmergencyAlert[]
 
   @@index([busNumber])
   @@index([registrationNumber])
@@ -220,6 +247,7 @@ model Route {
   buses      Bus[]
   routeStops RouteStop[]
   complaints Complaint[]
+  emergencyAlerts EmergencyAlert[]
 
   @@index([routeCode])
   @@index([routeName])
@@ -386,4 +414,45 @@ model Feedback {
   @@index([rating])
   @@index([createdAt])
   @@map("feedback")
+}
+
+model EmergencyAlert {
+  id               String             @id @default(uuid())
+  userId           String             @map("user_id")
+  role             Role
+  studentId        String?            @map("student_id")
+  facultyId        String?            @map("faculty_id")
+  busId            String?            @map("bus_id")
+  routeId          String?            @map("route_id")
+  latitude         Float?
+  longitude        Float?
+  locationAccuracy Float?             @map("location_accuracy")
+  message          String?
+  type             EmergencyType
+  priority         EmergencyPriority  @default(CRITICAL)
+  status           EmergencyStatus    @default(ACTIVE)
+  acknowledgedAt   DateTime?          @map("acknowledged_at")
+  acknowledgedBy   String?            @map("acknowledged_by")
+  resolvedAt       DateTime?          @map("resolved_at")
+  resolvedBy       String?            @map("resolved_by")
+  resolutionNote   String?            @map("resolution_note")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  faculty Faculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  bus     Bus?     @relation(fields: [busId], references: [id], onDelete: SetNull)
+  route   Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([studentId])
+  @@index([facultyId])
+  @@index([busId])
+  @@index([routeId])
+  @@index([status])
+  @@index([priority])
+  @@index([type])
+  @@index([createdAt])
+  @@map("emergency_alerts")
 }
