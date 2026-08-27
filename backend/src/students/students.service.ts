@@ -160,14 +160,34 @@ export class StudentsService {
   async getProfile(userId: string) {
     const student = await this.prisma.student.findUnique({
       where: { userId },
-      include: { user: { select: { id: true, email: true, status: true } } },
+      include: {
+        user: { select: { id: true, email: true, status: true } },
+        transportAssignment: {
+          include: {
+            bus: {
+              include: {
+                driver: { select: { id: true, name: true, phone: true } },
+                route: {
+                  include: {
+                    routeStops: {
+                      include: { busStop: true },
+                      orderBy: { stopOrder: 'asc' },
+                    },
+                  },
+                },
+              },
+            },
+            busStop: true,
+          },
+        },
+      },
     });
 
     if (!student) {
       throw new NotFoundException('Student profile not found');
     }
 
-    return this.formatResponse(student.user, student);
+    return this.formatProfileResponse(student.user, student);
   }
 
   private formatResponse(user: any, student: any) {
@@ -185,6 +205,47 @@ export class StudentsService {
       status: user.status,
       createdAt: student.createdAt,
       updatedAt: student.updatedAt,
+    };
+  }
+
+  private formatProfileResponse(user: any, student: any) {
+    const base = this.formatResponse(user, student);
+    const assignment = student.transportAssignment;
+
+    return {
+      ...base,
+      transport: assignment ? {
+        bus: assignment.bus ? {
+          id: assignment.bus.id,
+          busNumber: assignment.bus.busNumber,
+          registrationNumber: assignment.bus.registrationNumber,
+          driver: assignment.bus.driver || null,
+          route: assignment.bus.route ? {
+            id: assignment.bus.route.id,
+            routeCode: assignment.bus.route.routeCode,
+            routeName: assignment.bus.route.routeName,
+            stops: assignment.bus.route.routeStops.map((rs: any) => ({
+              stopOrder: rs.stopOrder,
+              estimatedArrivalTime: rs.estimatedArrivalTime,
+              busStop: {
+                id: rs.busStop.id,
+                name: rs.busStop.name,
+                latitude: rs.busStop.latitude,
+                longitude: rs.busStop.longitude,
+              },
+            })),
+          } : null,
+        } : null,
+        busStop: assignment.busStop ? {
+          id: assignment.busStop.id,
+          stopCode: assignment.busStop.stopCode,
+          name: assignment.busStop.name,
+          latitude: assignment.busStop.latitude,
+          longitude: assignment.busStop.longitude,
+        } : null,
+        startDate: assignment.startDate,
+        status: assignment.status,
+      } : null,
     };
   }
 }

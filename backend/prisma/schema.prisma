@@ -35,6 +35,16 @@ enum BusStatus {
   MAINTENANCE
 }
 
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -67,7 +77,8 @@ model Student {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transportAssignment StudentBusAssignment?
 
   @@index([userId])
   @@index([registerNumber])
@@ -88,7 +99,8 @@ model Faculty {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transportAssignment FacultyBusAssignment?
 
   @@index([userId])
   @@index([facultyId])
@@ -121,22 +133,123 @@ model Driver {
 }
 
 model Bus {
-  id                String    @id @default(uuid())
-  busNumber         Int       @unique @map("bus_number")
-  registrationNumber String   @unique @map("registration_number")
-  capacity          Int       @default(60)
-  boysCapacity      Int?      @map("boys_capacity")
-  girlsCapacity     Int?      @map("girls_capacity")
-  driverId          String?   @unique @map("driver_id")
-  status            BusStatus @default(ACTIVE)
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  id                 String     @id @default(uuid())
+  busNumber          Int        @unique @map("bus_number")
+  registrationNumber String     @unique @map("registration_number")
+  capacity           Int        @default(60)
+  boysCapacity       Int?       @map("boys_capacity")
+  girlsCapacity      Int?       @map("girls_capacity")
+  driverId           String?    @unique @map("driver_id")
+  routeId            String?    @map("route_id")
+  status             BusStatus  @default(ACTIVE)
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
-  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driver             Driver?                @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  route              Route?                 @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  studentAssignments StudentBusAssignment[]
+  facultyAssignments FacultyBusAssignment[]
 
   @@index([busNumber])
   @@index([registrationNumber])
   @@index([driverId])
+  @@index([routeId])
   @@index([status])
   @@map("buses")
+}
+
+model Route {
+  id          String       @id @default(uuid())
+  routeCode   String       @unique @map("route_code")
+  routeName   String       @map("route_name")
+  description String?
+  status      EntityStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  buses      Bus[]
+  routeStops RouteStop[]
+
+  @@index([routeCode])
+  @@index([routeName])
+  @@map("routes")
+}
+
+model BusStop {
+  id        String       @id @default(uuid())
+  stopCode  String       @unique @map("stop_code")
+  name      String
+  address   String?
+  latitude  Float?
+  longitude Float?
+  status    EntityStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  routeStops          RouteStop[]
+  studentAssignments  StudentBusAssignment[]
+
+  @@index([stopCode])
+  @@index([name])
+  @@map("bus_stops")
+}
+
+model RouteStop {
+  id                    String   @id @default(uuid())
+  routeId               String   @map("route_id")
+  busStopId             String   @map("bus_stop_id")
+  stopOrder             Int      @map("stop_order")
+  estimatedArrivalTime  String?  @map("estimated_arrival_time")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  route   Route   @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  busStop BusStop @relation(fields: [busStopId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, busStopId])
+  @@unique([routeId, stopOrder])
+  @@index([routeId])
+  @@index([busStopId])
+  @@map("route_stops")
+}
+
+model StudentBusAssignment {
+  id         String           @id @default(uuid())
+  studentId  String           @unique @map("student_id")
+  busId      String           @map("bus_id")
+  busStopId  String           @map("bus_stop_id")
+  startDate  DateTime         @default(now()) @map("start_date")
+  endDate    DateTime?        @map("end_date")
+  status     AssignmentStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bus     Bus     @relation(fields: [busId], references: [id], onDelete: Cascade)
+  busStop BusStop @relation(fields: [busStopId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([busId])
+  @@index([busStopId])
+  @@index([status])
+  @@map("student_bus_assignments")
+}
+
+model FacultyBusAssignment {
+  id         String           @id @default(uuid())
+  facultyId  String           @unique @map("faculty_id")
+  busId      String           @map("bus_id")
+  startDate  DateTime         @default(now()) @map("start_date")
+  endDate    DateTime?        @map("end_date")
+  status     AssignmentStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  bus     Bus     @relation(fields: [busId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@index([busId])
+  @@index([status])
+  @@map("faculty_bus_assignments")
 }

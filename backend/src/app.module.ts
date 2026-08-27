@@ -7,6 +7,10 @@ import { StudentsModule } from './students/students.module';
 import { FacultyModule } from './faculty/faculty.module';
 import { DriversModule } from './drivers/drivers.module';
 import { BusesModule } from './buses/buses.module';
+import { RoutesModule } from './routes/routes.module';
+import { BusStopsModule } from './bus-stops/bus-stops.module';
+import { RouteStopsModule } from './route-stops/route-stops.module';
+import { TransportAssignmentsModule } from './transport-assignments/transport-assignments.module';
 
 @Module({
   imports: [
@@ -17,6 +21,10 @@ import { BusesModule } from './buses/buses.module';
     FacultyModule,
     DriversModule,
     BusesModule,
+    RoutesModule,
+    BusStopsModule,
+    RouteStopsModule,
+    TransportAssignmentsModule,
     HealthModule,
   ],
 })
