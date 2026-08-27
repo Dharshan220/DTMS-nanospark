@@ -13,7 +13,7 @@ import type {
 } from "@/types/faculty";
 
 /** Role picked on the web login page. */
-export type LoginRole = "student" | "driver" | "faculty" | "admin";
+export type LoginRole = "student" | "faculty" | "admin";
 
 /** Map the web login pill to the server role. */
 export function serverRoleFor(role: LoginRole): AuthUser["role"] {

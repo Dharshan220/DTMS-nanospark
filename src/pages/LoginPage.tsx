@@ -10,7 +10,6 @@ import { ApiError } from "@/lib/api";
 
 const ROLE_LABELS: Record<LoginRole, string> = {
   student: "Student Login",
-  driver: "Driver Login",
   faculty: "Faculty Login",
   admin: "Admin Login",
 };
@@ -164,7 +163,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(["student", "driver", "faculty", "admin"] as LoginRole[]).map((item) => (
+            {(["student", "faculty", "admin"] as LoginRole[]).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -256,7 +255,6 @@ export default function LoginPage() {
             <div className="mt-4 rounded-2xl border border-[#dce2ff] bg-[#f7f9ff] px-4 py-3 text-[11px] text-slate-600">
               <span className="font-bold text-[#1a237e]">Demo account:</span>{" "}
               {DEMO_CREDS[role]}
-              {role === "driver" && " (driver accounts are not available in this demo)"}
             </div>
           )}
 
