@@ -112,6 +112,47 @@ enum EmergencyStatus {
   CANCELLED
 }
 
+enum NotificationChannel {
+  WHATSAPP
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum NotificationType {
+  EMERGENCY
+  COMPLAINT
+  FEEDBACK
+  TRANSPORT
+  SYSTEM
+}
+
+enum TransportEventType {
+  BUS_ASSIGNED
+  BUS_SWAPPED
+  BUS_REPLACED
+  BUS_CANCELLED
+  ROUTE_CHANGED
+  BUS_STOP_CHANGED
+  TRANSPORT_ANNOUNCEMENT
+}
+
+enum TransportNotificationTarget {
+  ALL_STUDENTS
+  ALL_FACULTY
+  ALL_USERS
+  SPECIFIC_BUS
+  SPECIFIC_ROUTE
+  SPECIFIC_STUDENTS
+  SPECIFIC_FACULTY
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -125,6 +166,7 @@ model User {
   student  Student?
   faculty  Faculty?
   emergencyAlerts EmergencyAlert[]
+  notifications  Notification[]
 
   @@index([email])
   @@index([role])
@@ -455,4 +497,50 @@ model EmergencyAlert {
   @@index([type])
   @@index([createdAt])
   @@map("emergency_alerts")
+}
+
+model Notification {
+  id                  String              @id @default(uuid())
+  userId              String              @map("user_id")
+  type                NotificationType
+  channel             NotificationChannel
+  title               String
+  message             String
+  status              NotificationStatus  @default(PENDING)
+  provider            String?
+  providerMessageId   String?             @map("provider_message_id")
+  errorCode           String?             @map("error_code")
+  errorMessage        String?             @map("error_message")
+  sentAt              DateTime?           @map("sent_at")
+  deliveredAt         DateTime?           @map("delivered_at")
+  readAt              DateTime?           @map("read_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([channel])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model TransportNotificationEvent {
+  id           String                  @id @default(uuid())
+  eventType    TransportEventType      @map("event_type")
+  entityType   String                  @map("entity_type")
+  entityId     String                  @map("entity_id")
+  createdBy    String?                 @map("created_by")
+  payload      Json
+  idempotencyKey String?               @unique @map("idempotency_key")
+  createdAt    DateTime                @default(now()) @map("created_at")
+
+  @@index([eventType])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([createdAt])
+  @@index([idempotencyKey])
+  @@map("transport_notification_events")
 }

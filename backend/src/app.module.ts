@@ -15,6 +15,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { ComplaintsModule } from './complaints/complaints.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { EmergencyModule } from './emergency/emergency.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { EmergencyModule } from './emergency/emergency.module';
     ComplaintsModule,
     FeedbackModule,
     EmergencyModule,
+    NotificationsModule,
     HealthModule,
   ],
 })
