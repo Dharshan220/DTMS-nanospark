@@ -23,6 +23,18 @@ enum ProfileStatus {
   INACTIVE
 }
 
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum BusStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -65,16 +77,16 @@ model Student {
 }
 
 model Faculty {
-  id         String        @id @default(uuid())
-  userId     String        @unique @map("user_id")
-  facultyId  String        @unique @map("faculty_id")
-  name       String
-  phone      String?
-  department String?
+  id          String        @id @default(uuid())
+  userId      String        @unique @map("user_id")
+  facultyId   String        @unique @map("faculty_id")
+  name        String
+  phone       String?
+  department  String?
   designation String?
-  status     ProfileStatus @default(ACTIVE)
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
+  status      ProfileStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -83,4 +95,48 @@ model Faculty {
   @@index([name])
   @@index([department])
   @@map("faculty")
+}
+
+model Driver {
+  id              String       @id @default(uuid())
+  driverCode      String       @unique @map("driver_code")
+  name            String
+  phone           String?
+  alternatePhone  String?      @map("alternate_phone")
+  licenseNumber   String       @unique @map("license_number")
+  licenseExpiry   DateTime?    @map("license_expiry")
+  experienceYears Int?         @map("experience_years")
+  address         String?
+  status          DriverStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  bus Bus?
+
+  @@index([driverCode])
+  @@index([name])
+  @@index([phone])
+  @@index([licenseNumber])
+  @@map("drivers")
+}
+
+model Bus {
+  id                String    @id @default(uuid())
+  busNumber         Int       @unique @map("bus_number")
+  registrationNumber String   @unique @map("registration_number")
+  capacity          Int       @default(60)
+  boysCapacity      Int?      @map("boys_capacity")
+  girlsCapacity     Int?      @map("girls_capacity")
+  driverId          String?   @unique @map("driver_id")
+  status            BusStatus @default(ACTIVE)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  driver Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([busNumber])
+  @@index([registrationNumber])
+  @@index([driverId])
+  @@index([status])
+  @@map("buses")
 }
