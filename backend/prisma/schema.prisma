@@ -50,6 +50,45 @@ enum TripType {
   EVENING
 }
 
+enum ComplaintCategory {
+  BUS
+  DRIVER
+  ROUTE
+  BUS_STOP
+  ATTENDANCE
+  SAFETY
+  OTHER
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum FeedbackCategory {
+  BUS
+  ROUTE
+  DRIVER
+  FACULTY
+  SERVICE
+  OTHER
+}
+
+enum FeedbackStatus {
+  SUBMITTED
+  REVIEWED
+  RESOLVED
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -84,6 +123,8 @@ model Student {
 
   user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   transportAssignment StudentBusAssignment?
+  complaints          Complaint[]
+  feedback            Feedback[]
 
   @@index([userId])
   @@index([registerNumber])
@@ -129,7 +170,8 @@ model Driver {
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  bus Bus?
+  bus        Bus?
+  complaints Complaint[]
 
   @@index([driverCode])
   @@index([name])
@@ -156,6 +198,7 @@ model Bus {
   studentAssignments StudentBusAssignment[]
   facultyAssignments FacultyBusAssignment[]
   attendances        Attendance[]
+  complaints         Complaint[]
 
   @@index([busNumber])
   @@index([registrationNumber])
@@ -176,6 +219,7 @@ model Route {
 
   buses      Bus[]
   routeStops RouteStop[]
+  complaints Complaint[]
 
   @@index([routeCode])
   @@index([routeName])
@@ -195,6 +239,7 @@ model BusStop {
 
   routeStops          RouteStop[]
   studentAssignments  StudentBusAssignment[]
+  complaints          Complaint[]
 
   @@index([stopCode])
   @@index([name])
@@ -282,4 +327,63 @@ model Attendance {
   @@index([date])
   @@index([tripType])
   @@map("attendance")
+}
+
+model Complaint {
+  id             String             @id @default(uuid())
+  studentId      String             @map("student_id")
+  subject        String
+  description    String
+  category       ComplaintCategory
+  priority       ComplaintPriority  @default(MEDIUM)
+  status         ComplaintStatus    @default(OPEN)
+  busId          String?            @map("bus_id")
+  driverId       String?            @map("driver_id")
+  routeId        String?            @map("route_id")
+  busStopId      String?            @map("bus_stop_id")
+  resolutionNote String?            @map("resolution_note")
+  resolvedAt     DateTime?          @map("resolved_at")
+  resolvedBy     String?            @map("resolved_by")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bus     Bus?    @relation(fields: [busId], references: [id], onDelete: SetNull)
+  driver  Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  route   Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  busStop BusStop? @relation(fields: [busStopId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([busId])
+  @@index([driverId])
+  @@index([routeId])
+  @@index([busStopId])
+  @@map("complaints")
+}
+
+model Feedback {
+  id         String           @id @default(uuid())
+  studentId  String           @map("student_id")
+  subject    String
+  message    String
+  rating     Int
+  category   FeedbackCategory
+  status     FeedbackStatus   @default(SUBMITTED)
+  reviewedAt DateTime?        @map("reviewed_at")
+  reviewedBy String?          @map("reviewed_by")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([status])
+  @@index([category])
+  @@index([rating])
+  @@index([createdAt])
+  @@map("feedback")
 }
