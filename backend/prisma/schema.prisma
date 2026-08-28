@@ -133,6 +133,18 @@ enum NotificationType {
   SYSTEM
 }
 
+enum ScheduleStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+}
+
+enum ScheduleOverrideStatus {
+  SCHEDULED
+  CANCELLED
+  REPLACED
+}
+
 enum TransportEventType {
   BUS_ASSIGNED
   BUS_SWAPPED
@@ -141,6 +153,11 @@ enum TransportEventType {
   ROUTE_CHANGED
   BUS_STOP_CHANGED
   TRANSPORT_ANNOUNCEMENT
+  SCHEDULE_CREATED
+  SCHEDULE_CHANGED
+  SCHEDULE_TIME_CHANGED
+  TRIP_CANCELLED
+  BUS_REPLACED_SCHEDULE
 }
 
 enum TransportNotificationTarget {
@@ -268,6 +285,8 @@ model Bus {
   attendances        Attendance[]
   complaints         Complaint[]
   emergencyAlerts    EmergencyAlert[]
+  transportSchedules TransportSchedule[]
+  scheduleOverrides  ScheduleOverride[]
 
   @@index([busNumber])
   @@index([registrationNumber])
@@ -290,6 +309,7 @@ model Route {
   routeStops RouteStop[]
   complaints Complaint[]
   emergencyAlerts EmergencyAlert[]
+  transportSchedules TransportSchedule[]
 
   @@index([routeCode])
   @@index([routeName])
@@ -543,4 +563,53 @@ model TransportNotificationEvent {
   @@index([createdAt])
   @@index([idempotencyKey])
   @@map("transport_notification_events")
+}
+
+model TransportSchedule {
+  id                  String         @id @default(uuid())
+  busId               String         @map("bus_id")
+  routeId             String         @map("route_id")
+  tripType            TripType       @map("trip_type")
+  departureTime       String         @map("departure_time")
+  expectedArrivalTime String         @map("expected_arrival_time")
+  effectiveFrom       DateTime       @map("effective_from")
+  effectiveUntil      DateTime?      @map("effective_until")
+  status              ScheduleStatus @default(ACTIVE)
+  createdBy           String?        @map("created_by")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  bus       Bus              @relation(fields: [busId], references: [id], onDelete: Cascade)
+  route     Route            @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  overrides ScheduleOverride[]
+
+  @@index([busId])
+  @@index([routeId])
+  @@index([tripType])
+  @@index([status])
+  @@index([effectiveFrom])
+  @@index([effectiveUntil])
+  @@map("transport_schedules")
+}
+
+model ScheduleOverride {
+  id                String                @id @default(uuid())
+  scheduleId        String                @map("schedule_id")
+  date              DateTime              @db.Date
+  replacementBusId  String?               @map("replacement_bus_id")
+  status            ScheduleOverrideStatus @default(SCHEDULED)
+  reason            String?
+  createdBy         String?               @map("created_by")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  schedule       TransportSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  replacementBus Bus?              @relation(fields: [replacementBusId], references: [id], onDelete: SetNull)
+
+  @@unique([scheduleId, date])
+  @@index([scheduleId])
+  @@index([date])
+  @@index([replacementBusId])
+  @@index([status])
+  @@map("schedule_overrides")
 }
