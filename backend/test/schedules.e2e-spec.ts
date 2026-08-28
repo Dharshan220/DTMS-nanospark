@@ -489,12 +489,7 @@ describe('Schedules (e2e)', () => {
     });
 
     it('should not allow cancelling already cancelled schedule', async () => {
-      await request(app.getHttpServer())
-        .patch(`/api/admin/schedules/${scheduleId}/cancel`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'ACTIVE' });
-
-      // Create and cancel
+      // Create a schedule, cancel it, then try to cancel again
       const createRes = await request(app.getHttpServer())
         .post('/api/admin/schedules')
         .set('Authorization', `Bearer ${adminToken}`)

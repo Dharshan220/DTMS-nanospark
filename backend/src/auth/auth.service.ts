@@ -53,10 +53,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    try {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+    } catch {
+      this.logger.warn(`Failed to update lastLoginAt for user ${user.id}`);
+    }
 
     const tokens = this.generateTokens(user.id, user.role);
 

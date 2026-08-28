@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
 
 export class CreateRouteDto {
   @IsString()
@@ -30,5 +30,3 @@ export class UpdateRouteStatusDto {
   @IsIn(['ACTIVE', 'INACTIVE'])
   status: string;
 }
-
-import { IsIn } from 'class-validator';

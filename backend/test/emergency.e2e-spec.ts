@@ -166,6 +166,14 @@ describe('Emergency / SOS (e2e)', () => {
     });
 
     it('should default to OTHER type if not provided', async () => {
+      // Cancel student2's existing active emergency first so the duplicate check doesn't interfere
+      const existing = await prisma.emergencyAlert.findFirst({
+        where: { userId: (await prisma.student.findUnique({ where: { registerNumber: 'STU-EMG-002' } }))!.userId, status: 'ACTIVE' },
+      });
+      if (existing) {
+        await prisma.emergencyAlert.update({ where: { id: existing.id }, data: { status: 'CANCELLED' } });
+      }
+
       const response = await request(app.getHttpServer())
         .post('/api/emergency')
         .set('Authorization', `Bearer ${student2Token}`)
@@ -308,10 +316,16 @@ describe('Emergency / SOS (e2e)', () => {
     });
 
     it('should return false if no active emergency', async () => {
-      // Admin user has no active emergency
+      // Cancel student2's active emergency so they have none
+      const student2UserId = (await prisma.student.findUnique({ where: { registerNumber: 'STU-EMG-002' } }))!.userId;
+      await prisma.emergencyAlert.updateMany({
+        where: { userId: student2UserId, status: 'ACTIVE' },
+        data: { status: 'CANCELLED' },
+      });
+
       const response = await request(app.getHttpServer())
         .get('/api/emergency/active')
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${student2Token}`)
         .expect(200);
 
       expect(response.body.active).toBe(false);
@@ -338,18 +352,9 @@ describe('Emergency / SOS (e2e)', () => {
 
   describe('PATCH /api/emergency/:id/cancel', () => {
     it('should allow user to cancel own active emergency', async () => {
-      // First create a new emergency to cancel
-      const createResponse = await request(app.getHttpServer())
-        .post('/api/emergency')
-        .set('Authorization', `Bearer ${studentToken}`)
-        .send({
-          type: 'SECURITY',
-          message: 'Test cancellation',
-        });
-      const cancelId = createResponse.body.id;
-
+      // Cancel student's existing active emergency directly (avoids rate limiter on POST)
       const response = await request(app.getHttpServer())
-        .patch(`/api/emergency/${cancelId}/cancel`)
+        .patch(`/api/emergency/${emergencyId}/cancel`)
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
@@ -357,8 +362,24 @@ describe('Emergency / SOS (e2e)', () => {
     });
 
     it('should not allow cancelling other users emergency', async () => {
+      // Create a fresh emergency for student via Prisma (avoids rate limiter)
+      const studentUserId = (await prisma.student.findUnique({ where: { registerNumber: 'STU-EMG-001' } }))!.userId;
+      const studentProfile = await prisma.student.findUnique({ where: { registerNumber: 'STU-EMG-001' } });
+      const fresh = await prisma.emergencyAlert.create({
+        data: {
+          userId: studentUserId,
+          studentId: studentProfile!.id,
+          role: 'STUDENT',
+          type: 'SAFETY',
+          priority: 'CRITICAL',
+          status: 'ACTIVE',
+          message: 'Fresh emergency for ownership test',
+        },
+      });
+      emergencyId = fresh.id;
+
       await request(app.getHttpServer())
-        .patch(`/api/emergency/${emergencyId}/cancel`)
+        .patch(`/api/emergency/${fresh.id}/cancel`)
         .set('Authorization', `Bearer ${student2Token}`)
         .expect(403);
     });

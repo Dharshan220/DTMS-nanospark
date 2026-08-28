@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsNumber,
   IsDateString,
+  IsIn,
   Min,
   Max,
   MinLength,
@@ -86,5 +87,3 @@ export class UpdateDriverStatusDto {
   @IsIn(['ACTIVE', 'INACTIVE', 'ON_LEAVE'])
   status: string;
 }
-
-import { IsIn } from 'class-validator';

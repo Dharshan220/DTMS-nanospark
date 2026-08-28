@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsIn,
   IsNumber,
+  IsInt,
   Min,
   Max,
   MaxLength,
@@ -23,7 +24,7 @@ export class CreateFeedbackDto {
   @MaxLength(2000)
   message: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   @Max(5)
   rating: number;
