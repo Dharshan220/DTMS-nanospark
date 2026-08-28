@@ -82,6 +82,15 @@ export class AuthService {
     return secret;
   }
 
+  getAccessTokenSecret(): string {
+    const secret = this.configService.get<string>('JWT_ACCESS_SECRET');
+    if (!secret) {
+      this.logger.error('JWT_ACCESS_SECRET is not set in environment');
+      throw new UnauthorizedException('Server configuration error');
+    }
+    return secret;
+  }
+
   refreshTokens(refreshToken: string): AuthTokens {
     try {
       const secret = this.getRefreshTokenSecret();

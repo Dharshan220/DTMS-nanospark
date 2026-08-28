@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StudentsModule } from './students/students.module';
@@ -23,6 +24,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
+    CommonModule,
     AuthModule,
     StudentsModule,
     FacultyModule,

@@ -13,4 +13,16 @@ export class HealthService {
       timestamp: new Date().toISOString(),
     };
   }
+
+  async ready() {
+    const dbConnected = this.prisma.connected;
+    const status = dbConnected ? 'ok' : 'degraded';
+
+    return {
+      status,
+      service: 'DTMS Backend',
+      database: dbConnected ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
