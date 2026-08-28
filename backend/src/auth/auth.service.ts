@@ -74,7 +74,12 @@ export class AuthService {
   }
 
   getRefreshTokenSecret(): string {
-    return this.configService.get<string>('JWT_REFRESH_SECRET') || 'fallback-secret';
+    const secret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!secret) {
+      this.logger.error('JWT_REFRESH_SECRET is not set in environment');
+      throw new UnauthorizedException('Server configuration error');
+    }
+    return secret;
   }
 
   refreshTokens(refreshToken: string): AuthTokens {

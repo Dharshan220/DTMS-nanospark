@@ -320,8 +320,10 @@ export class EmergencyService {
           select: { id: true, name: true, facultyId: true },
         },
         bus: {
-          select: { id: true, busNumber: true, registrationNumber: true },
-          include: {
+          select: {
+            id: true,
+            busNumber: true,
+            registrationNumber: true,
             driver: {
               select: { id: true, name: true, phone: true },
             },
