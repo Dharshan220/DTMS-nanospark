@@ -39,7 +39,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,10 +50,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { initials } from "@/lib/faculty";
 import { publicAsset } from "@/lib/publicAsset";
 import AdminErrorBoundary from "@/components/admin/AdminErrorBoundary";
-import type { NotificationItem } from "@/types/faculty";
+import type { NotificationItem, Paginated } from "@/types/faculty";
 
 interface NavEntry {
   label: string;
@@ -135,6 +134,10 @@ function AdminClock() {
   );
 }
 
+function userInitials(email: string): string {
+  return email?.split("@")[0]?.slice(0, 2)?.toUpperCase() ?? "AD";
+}
+
 function AppSidebar() {
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -183,22 +186,21 @@ function AppSidebar() {
         <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 group-data-[collapsible=icon]:justify-center">
           <div className="relative">
             <Avatar className="h-8 w-8">
-              {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={user.name} /> : null}
               <AvatarFallback className="bg-[#1a237e] text-[10px] font-bold text-white">
-                {user ? initials(user.name) : "?"}
+                {user ? userInitials(user.email) : "?"}
               </AvatarFallback>
             </Avatar>
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-green-500" />
           </div>
           <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-xs font-bold text-foreground">{user?.name}</p>
-            <p className="truncate text-[10px] text-muted-foreground">Super Admin</p>
+            <p className="truncate text-xs font-bold text-foreground">{user?.email}</p>
+            <p className="truncate text-[10px] text-muted-foreground">Admin</p>
           </div>
           <button
             type="button"
             title="Log out"
             onClick={() => {
-              logout();
+              void logout();
               navigate("/login");
             }}
             className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:hidden"
@@ -219,11 +221,11 @@ export default function AdminLayout() {
   const title = pageTitleFor(location.pathname);
 
   const { data: notifications } = useQuery({
-    queryKey: ["admin-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryKey: ["admin-notifications-layout"],
+    queryFn: () => api.get<Paginated<NotificationItem>>("/admin/notifications?page=1&limit=5"),
     refetchInterval: 60000,
   });
-  const unread = notifications?.unread ?? 0;
+  const unread = notifications?.data?.filter((n) => !n.readAt).length ?? 0;
 
   return (
     <SidebarProvider>
@@ -255,9 +257,8 @@ export default function AdminLayout() {
               <DropdownMenuTrigger asChild>
                 <button type="button" className="rounded-full outline-none ring-primary focus-visible:ring-2">
                   <Avatar className="h-8 w-8 border border-border">
-                    {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={user.name} /> : null}
                     <AvatarFallback className="bg-[#1a237e] text-[11px] font-bold text-white">
-                      {user ? initials(user.name) : "?"}
+                      {user ? userInitials(user.email) : "?"}
                     </AvatarFallback>
                   </Avatar>
                 </button>
@@ -266,7 +267,7 @@ export default function AdminLayout() {
                 <DropdownMenuLabel>
                   <p className="flex items-center gap-1.5 text-sm font-bold">
                     <ShieldCheck className="h-3.5 w-3.5 text-[#1a237e]" />
-                    {user?.name}
+                    Admin
                   </p>
                   <p className="text-xs font-normal text-muted-foreground">{user?.email}</p>
                 </DropdownMenuLabel>
@@ -278,7 +279,7 @@ export default function AdminLayout() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
-                    logout();
+                    void logout();
                     navigate("/login");
                   }}
                   className="text-destructive focus:text-destructive"

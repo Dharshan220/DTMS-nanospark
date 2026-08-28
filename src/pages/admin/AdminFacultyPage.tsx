@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import { Pencil, Plus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import PageHeader from "@/components/faculty/PageHeader";
@@ -25,8 +25,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import FormDialog from "@/components/admin/FormDialog";
-import DeleteConfirm from "@/components/admin/DeleteConfirm";
-import type { PublicUser, RouteInfo } from "@/types/faculty";
+
+interface FacultyListItem {
+  id: string;
+  userId: string;
+  email: string;
+  facultyId: string;
+  name: string;
+  phone: string | null;
+  department: string | null;
+  designation: string | null;
+  status: "ACTIVE" | "INACTIVE";
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface FacultyForm {
   id: string | null;
@@ -34,9 +46,9 @@ interface FacultyForm {
   email: string;
   phone: string;
   password: string;
-  gender: string;
+  facultyId: string;
   department: string;
-  routeNumber: string;
+  designation: string;
 }
 
 const EMPTY: FacultyForm = {
@@ -45,88 +57,104 @@ const EMPTY: FacultyForm = {
   email: "",
   phone: "",
   password: "",
-  gender: "",
+  facultyId: "",
   department: "",
-  routeNumber: "",
+  designation: "",
 };
 
-/** Radix Select forbids empty-string item values; use a sentinel for "no selection". */
 const NO_SELECTION = "__none__";
 
 export default function AdminFacultyPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FacultyForm>(EMPTY);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState<PublicUser | null>(null);
+  const [deactivating, setDeactivating] = useState<FacultyListItem | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
   const facultyQuery = useQuery({
-    queryKey: ["admin-faculty", search],
-    queryFn: () => api.get<{ items: PublicUser[]; total: number }>(`/users?role=teacher&search=${encodeURIComponent(search)}`),
-  });
-  const routesQuery = useQuery({
-    queryKey: ["admin-routes"],
-    queryFn: () => api.get<{ items: RouteInfo[]; total: number }>("/transport"),
+    queryKey: ["admin-faculty", search, page],
+    queryFn: () =>
+      api.get<{ data: FacultyListItem[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
+        `/admin/faculty?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`
+      ),
   });
 
-  const saveMutation = useMutation({
-    mutationFn: (f: FacultyForm) => {
-      const payload = {
-        name: f.name,
+  const createMutation = useMutation({
+    mutationFn: (f: FacultyForm) =>
+      api.post<FacultyListItem>("/admin/faculty", {
         email: f.email,
-        phone: f.phone || null,
-        gender: f.gender || null,
-        department: f.department || null,
-        routeNumber: f.routeNumber === "" ? null : Number(f.routeNumber),
-      };
-      if (f.id) {
-        return api.put<{ user: PublicUser }>(`/users/${f.id}`, payload);
-      }
-      return api.post<{ user: PublicUser }>("/users", { ...payload, role: "teacher", password: f.password });
-    },
+        password: f.password,
+        facultyId: f.facultyId,
+        name: f.name,
+        phone: f.phone || undefined,
+        department: f.department || undefined,
+        designation: f.designation || undefined,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-faculty"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
       setDialogOpen(false);
       setForm(EMPTY);
-      toast.success("Faculty member saved");
+      toast.success("Faculty member created");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not save faculty member"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not create faculty member"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.del(`/users/${id}`),
+  const updateMutation = useMutation({
+    mutationFn: (f: FacultyForm) =>
+      api.patch<FacultyListItem>(`/admin/faculty/${f.id}`, {
+        name: f.name,
+        phone: f.phone || undefined,
+        department: f.department || undefined,
+        designation: f.designation || undefined,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-faculty"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      setDeleting(null);
-      toast.success("Faculty member deleted");
+      setDialogOpen(false);
+      setForm(EMPTY);
+      toast.success("Faculty member updated");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not delete faculty member"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update faculty member"),
   });
 
-  if (facultyQuery.isLoading || routesQuery.isLoading) return <PageSkeleton rows={6} />;
-  if (facultyQuery.isError || routesQuery.isError) {
-    return <PageError message="Could not load faculty data." onRetry={() => { void facultyQuery.refetch(); void routesQuery.refetch(); }} />;
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.patch(`/admin/faculty/${id}/status`, { status: "INACTIVE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-faculty"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      setDeactivating(null);
+      toast.success("Faculty member deactivated");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not deactivate faculty member"),
+  });
+
+  if (facultyQuery.isLoading) return <PageSkeleton rows={6} />;
+  if (facultyQuery.isError) {
+    return <PageError message="Could not load faculty data." onRetry={() => void facultyQuery.refetch()} />;
   }
 
-  const faculty = facultyQuery.data!.items;
-  const routes = routesQuery.data!.items;
+  const faculty = facultyQuery.data!.data;
+  const pagination = facultyQuery.data!.pagination;
 
   const openCreate = () => {
     setForm(EMPTY);
     setDialogOpen(true);
   };
-  const openEdit = (u: PublicUser) => {
+
+  const openEdit = (f: FacultyListItem) => {
     setForm({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      phone: u.phone ?? "",
+      id: f.id,
+      name: f.name,
+      email: f.email,
+      phone: f.phone ?? "",
       password: "",
-      gender: u.gender ?? "",
-      department: u.department ?? "",
-      routeNumber: u.routeNumber == null ? "" : String(u.routeNumber),
+      facultyId: f.facultyId,
+      department: f.department ?? "",
+      designation: f.designation ?? "",
     });
     setDialogOpen(true);
   };
@@ -147,11 +175,11 @@ export default function AdminFacultyPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
             <UserRound className="h-4 w-4 text-[#1a237e]" />
-            Faculty ({facultyQuery.data!.total})
+            Faculty ({pagination.total})
           </CardTitle>
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search by name, email or phone…"
             className="max-w-sm"
           />
@@ -166,40 +194,81 @@ export default function AdminFacultyPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Faculty ID</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Department</TableHead>
-                    <TableHead>Assigned Route</TableHead>
+                    <TableHead>Designation</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {faculty.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-bold">{u.name}</TableCell>
-                      <TableCell className="text-xs">{u.email}</TableCell>
-                      <TableCell>{u.phone ?? "—"}</TableCell>
-                      <TableCell>{u.department ?? "—"}</TableCell>
-                      <TableCell>{u.routeNumber ? `Route ${u.routeNumber}` : "—"}</TableCell>
+                  {faculty.map((f) => (
+                    <TableRow key={f.id}>
+                      <TableCell className="font-bold">{f.name}</TableCell>
+                      <TableCell className="text-xs">{f.email}</TableCell>
+                      <TableCell>{f.facultyId}</TableCell>
+                      <TableCell>{f.phone ?? "—"}</TableCell>
+                      <TableCell>{f.department ?? "—"}</TableCell>
+                      <TableCell>{f.designation ?? "—"}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            f.status === "ACTIVE"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {f.status}
+                        </span>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="Edit">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(f)} title="Edit">
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleting(u)}
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {f.status === "ACTIVE" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeactivating(f)}
+                              title="Deactivate"
+                            >
+                              Deactivate
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {pagination.totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Page {pagination.page} of {pagination.totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= pagination.totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -215,13 +284,21 @@ export default function AdminFacultyPage() {
             toast.error("Name and email are required.");
             return;
           }
+          if (!form.id && !form.facultyId.trim()) {
+            toast.error("Faculty ID is required.");
+            return;
+          }
           if (!form.id && form.password.length < 4) {
             toast.error("Password must be at least 4 characters.");
             return;
           }
-          saveMutation.mutate(form);
+          if (form.id) {
+            updateMutation.mutate(form);
+          } else {
+            createMutation.mutate(form);
+          }
         }}
-        saving={saveMutation.isPending}
+        saving={createMutation.isPending || updateMutation.isPending}
         saveLabel={form.id ? "Save Faculty" : "Create Faculty"}
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -232,6 +309,15 @@ export default function AdminFacultyPage() {
           <div className="space-y-1.5">
             <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email *</Label>
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} type="email" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Faculty ID *</Label>
+            <Input
+              value={form.facultyId}
+              onChange={(e) => setForm({ ...form, facultyId: e.target.value })}
+              disabled={!!form.id}
+              placeholder="e.g. FAC001"
+            />
           </div>
           {!form.id ? (
             <div className="space-y-1.5">
@@ -244,44 +330,24 @@ export default function AdminFacultyPage() {
             <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Gender</Label>
-            <Select value={form.gender || NO_SELECTION} onValueChange={(v) => setForm({ ...form, gender: v === NO_SELECTION ? "" : v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>—</SelectItem>
-                <SelectItem value="male">Male</SelectItem>
-                <SelectItem value="female">Female</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
             <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Department</Label>
             <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assigned route</Label>
-            <Select value={form.routeNumber || NO_SELECTION} onValueChange={(v) => setForm({ ...form, routeNumber: v === NO_SELECTION ? "" : v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SELECTION}>— No route —</SelectItem>
-                {routes.map((r) => (
-                  <SelectItem key={r.id} value={String(r.routeNumber)}>
-                    Route {r.routeNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Designation</Label>
+            <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Professor" />
           </div>
         </div>
       </FormDialog>
 
-      <DeleteConfirm
-        open={deleting !== null}
-        onOpenChange={(o) => { if (!o) setDeleting(null); }}
-        title="Delete this faculty member?"
-        description={`${deleting?.name} (${deleting?.email}) will be removed along with their account.`}
-        onConfirm={() => { if (deleting) deleteMutation.mutate(deleting.id); }}
-        deleting={deleteMutation.isPending}
+      <FormDialog
+        open={deactivating !== null}
+        onOpenChange={(o) => { if (!o) setDeactivating(null); }}
+        title="Deactivate this faculty member?"
+        description={`${deactivating?.name} (${deactivating?.email}) will be marked as inactive and will no longer have access.`}
+        onSave={() => { if (deactivating) deactivateMutation.mutate(deactivating.id); }}
+        saving={deactivateMutation.isPending}
+        saveLabel="Deactivate"
       />
     </>
   );

@@ -4,71 +4,53 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { api } from "@/lib/api";
-import { boardingStatusFor, deriveBusStatus } from "@/lib/faculty";
-import { demoTripState } from "@/data/facultyDemo";
+import { deriveBusStatus } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import { BusStatusBadge } from "@/components/faculty/Badges";
 import { PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type {
-  AttendanceRecord,
-  DashboardResponse,
-  Paginated,
-  StudentProfile,
-} from "@/types/faculty";
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import type { FacultyProfile } from "@/types/faculty";
 
 export default function MyBusPage() {
-  const dashQuery = useQuery({
-    queryKey: ["faculty-dashboard"],
-    queryFn: () => api.get<DashboardResponse>("/dashboard"),
-  });
-  const studentsQuery = useQuery({
-    queryKey: ["faculty-students"],
-    queryFn: () => api.get<Paginated<StudentProfile>>("/users?role=student&limit=100"),
-  });
-  const attendanceQuery = useQuery({
-    queryKey: ["faculty-attendance"],
-    queryFn: () => api.get<{ items: AttendanceRecord[] }>("/attendance"),
+  const profileQuery = useQuery({
+    queryKey: ["faculty-profile"],
+    queryFn: () => api.get<FacultyProfile>("/faculty/profile"),
   });
 
-  if (dashQuery.isLoading || studentsQuery.isLoading || attendanceQuery.isLoading) return <PageSkeleton />;
-  if (dashQuery.isError || studentsQuery.isError) {
-    return <PageError message="Could not load your bus details." onRetry={() => { void dashQuery.refetch(); void studentsQuery.refetch(); }} />;
-  }
-
-  const dash = dashQuery.data!;
-  const students = studentsQuery.data!.items;
-  const attendance = attendanceQuery.data!.items;
-  const route = dash.route;
-  const bus = dash.myBus;
-
-  if (!bus || !route) {
+  if (profileQuery.isLoading) return <PageSkeleton />;
+  if (profileQuery.isError) {
     return (
       <PageError
-        message="No bus is assigned to your profile yet."
-        onRetry={() => void dashQuery.refetch()}
+        message="Could not load your bus details."
+        onRetry={() => void profileQuery.refetch()}
       />
     );
   }
 
-  const capacity = 60;
-  const boardedMorning = students.filter(
-    (s) => boardingStatusFor(s, attendance, today(), "morning") === "boarded"
-  ).length;
-  const occupancy = Math.min(capacity, boardedMorning);
-  const occupancyPct = Math.round((occupancy / capacity) * 100);
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus;
 
-  const trip = demoTripState(bus.routeNumber, today());
-  const status = deriveBusStatus(
-    bus,
-    route ? { boardingPoints: route.stops, arrivalTime: route.arrivalTime } : null,
-    trip.delayed
-  );
-  const firstStop = route.stops[0];
-  const collegeStop = route.stops.find((s) => s.name.toUpperCase() === "COLLEGE");
+  if (!bus) {
+    return (
+      <PageError
+        message="No bus is assigned to your profile yet."
+        onRetry={() => void profileQuery.refetch()}
+      />
+    );
+  }
+
+  const route = bus.route;
+  const routeStops = route?.stops
+    ?.sort((a, b) => a.stopOrder - b.stopOrder)
+    .map((s) => ({
+      name: s.busStop.name,
+      time: s.estimatedArrivalTime ?? "—",
+    })) ?? [];
+
+  const firstStop = routeStops[0];
+  const collegeStop = routeStops.find((s) => s.name.toUpperCase() === "COLLEGE");
+  const capacity = 60;
+  const status = deriveBusStatus(bus, null, false);
 
   return (
     <>
@@ -83,7 +65,7 @@ export default function MyBusPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
               <Bus className="h-4 w-4 text-[#1a237e]" />
-              Bus {bus.routeNumber}
+              Bus {bus.busNumber}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -92,14 +74,10 @@ export default function MyBusPage() {
                 <Bus className="h-8 w-8" />
               </div>
               <div>
-                <p className="text-2xl font-extrabold tracking-wide">{bus.vehicleNumber}</p>
+                <p className="text-2xl font-extrabold tracking-wide">{bus.registrationNumber}</p>
                 <p className="text-xs font-semibold text-white/70">
-                  Route {bus.routeNumber} · {bus.status === "maintenance" ? "In maintenance" : "In service"}
+                  Route {bus.busNumber} · {bus.status === "MAINTENANCE" ? "In maintenance" : "In service"}
                 </p>
-              </div>
-              <div className="ml-auto hidden text-right sm:block">
-                <p className="text-3xl font-extrabold text-[#FFD700]">{occupancy}</p>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">on board today</p>
               </div>
             </div>
 
@@ -110,31 +88,19 @@ export default function MyBusPage() {
               </div>
               <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Registration number</p>
-                <p className="text-sm font-bold text-foreground">{bus.vehicleNumber}</p>
+                <p className="text-sm font-bold text-foreground">{bus.registrationNumber}</p>
               </div>
               <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Capacity</p>
                 <p className="text-sm font-bold text-foreground">{capacity} seats</p>
               </div>
               <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Current occupancy</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
                 <p className="text-sm font-bold text-foreground">
-                  {occupancy} / {capacity} ({occupancyPct}%)
+                  {bus.status === "MAINTENANCE" ? "In maintenance" : "In service"}
                 </p>
               </div>
             </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
-                <span>Today&apos;s occupancy</span>
-                <span>{occupancyPct}%</span>
-              </div>
-              <Progress value={occupancyPct} className="h-2.5 [&>div]:bg-[#1a237e]" />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Occupancy counts students who boarded on the morning trip. Students without an attendance
-              record are estimated by the demo service.
-            </p>
           </CardContent>
         </Card>
 
@@ -152,17 +118,19 @@ export default function MyBusPage() {
                   <UserRound className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-extrabold text-foreground">{bus.driverName || "Not assigned"}</p>
+                  <p className="text-sm font-extrabold text-foreground">{bus.driver?.name || "Not assigned"}</p>
                   <p className="text-[11px] text-muted-foreground">Bus driver</p>
                 </div>
               </div>
-              <a
-                href={`tel:${bus.driverPhone}`}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-xs font-bold text-[#1a237e] shadow-sm transition hover:-translate-y-[1px]"
-              >
-                <Phone className="h-3.5 w-3.5" />
-                {bus.driverPhone || "No contact"}
-              </a>
+              {bus.driver?.phone && (
+                <a
+                  href={`tel:${bus.driver.phone}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-xs font-bold text-[#1a237e] shadow-sm transition hover:-translate-y-[1px]"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  {bus.driver.phone}
+                </a>
+              )}
               <p className="text-[11px] text-muted-foreground">
                 Driver changes are managed by the transport department.
               </p>
@@ -177,24 +145,30 @@ export default function MyBusPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p className="flex items-center gap-2 font-bold text-foreground">
-                <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
-                  Route {route.routeNumber}
-                </Badge>
-                {route.stops.length} stops
-              </p>
-              <p className="flex items-center gap-2 text-muted-foreground">
-                <CalendarClock className="h-4 w-4" />
-                Departs {firstStop?.name} at {firstStop?.time}
-              </p>
-              <p className="flex items-center gap-2 text-muted-foreground">
-                <CalendarClock className="h-4 w-4" />
-                Arrives {collegeStop?.name ?? "College"} by {route.arrivalTime}
-              </p>
+              {route ? (
+                <>
+                  <p className="flex items-center gap-2 font-bold text-foreground">
+                    <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
+                      Route {route.routeCode}
+                    </Badge>
+                    {routeStops.length} stops
+                  </p>
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarClock className="h-4 w-4" />
+                    Departs {firstStop?.name} at {firstStop?.time}
+                  </p>
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarClock className="h-4 w-4" />
+                    Arrives {collegeStop?.name ?? "College"} by {routeStops[routeStops.length - 1]?.time ?? "—"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-muted-foreground">No route assigned</p>
+              )}
             </CardContent>
           </Card>
 
-          {bus.status === "maintenance" && (
+          {bus.status === "MAINTENANCE" && (
             <Card className="border-red-200 bg-red-50/60 shadow-card">
               <CardContent className="flex items-start gap-3 p-4">
                 <Wrench className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />

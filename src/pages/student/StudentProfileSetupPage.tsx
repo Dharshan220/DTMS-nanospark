@@ -1,73 +1,33 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Loader2, Save, UserRound } from "lucide-react";
+import { AlertCircle, Bus, CalendarDays, Mail, MapPin, Phone, UserRound } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { api, ApiError } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import type { AuthUser, RouteInfo } from "@/types/faculty";
+import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api";
+import { formatDateTime } from "@/lib/faculty";
+import { PageError, PageSkeleton } from "@/components/faculty/DataState";
+import type { StudentProfile } from "@/types/faculty";
 
 export default function StudentProfileSetupPage() {
-  const { user, refresh } = useAuth();
-  const navigate = useNavigate();
-
-  const [name, setName] = useState(user?.name ?? "");
-  const [rollNo, setRollNo] = useState(user?.rollNo ?? "");
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [department, setDepartment] = useState(user?.department ?? "");
-  const [year, setYear] = useState(user?.year ?? "");
-  const [section, setSection] = useState(user?.section ?? "");
-  const [routeNumber, setRouteNumber] = useState<string>(user?.routeNumber != null ? String(user.routeNumber) : "");
-  const [boardingStop, setBoardingStop] = useState(user?.boardingStop ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const routesQuery = useQuery({
-    queryKey: ["routes", "setup"],
-    queryFn: () => api.get<{ items: RouteInfo[] }>("/transport"),
+  const profileQuery = useQuery({
+    queryKey: ["student-profile"],
+    queryFn: () => api.get<StudentProfile>("/student/profile"),
   });
-  const routes = routesQuery.data?.items ?? [];
 
-  const selectedRoute = routes.find((r) => String(r.routeNumber) === routeNumber);
-  const boardingPoints = useMemo(
-    () => selectedRoute?.boardingPoints ?? selectedRoute?.stops ?? [],
-    [selectedRoute]
-  );
+  if (profileQuery.isLoading) return <PageSkeleton />;
+  if (profileQuery.isError) {
+    return (
+      <PageError
+        message="Could not load your profile."
+        onRetry={() => void profileQuery.refetch()}
+      />
+    );
+  }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await api.put<{ user: AuthUser }>("/auth/profile", {
-        name: name.trim(),
-        rollNo: rollNo.trim(),
-        phone: phone.trim(),
-        department: department.trim() || null,
-        year: year.trim() || null,
-        section: section.trim() || null,
-        routeNumber: routeNumber ? Number(routeNumber) : null,
-        boardingStop: boardingStop,
-      });
-      await refresh();
-      navigate("/student", { replace: true });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save your profile. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus ?? null;
+  const busStop = transport?.busStop ?? null;
+  const route = bus?.route ?? null;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -76,165 +36,124 @@ export default function StudentProfileSetupPage() {
         <CardHeader className="border-b border-[#dce2ff] bg-[#f7f9ff]">
           <CardTitle className="flex items-center gap-2 text-lg font-extrabold text-[#1a237e]">
             <UserRound className="h-5 w-5 text-[#b8860b]" />
-            Complete your transport profile
+            My Transport Profile
           </CardTitle>
           <p className="text-xs text-slate-600">
-            Fill in your details to get your bus route, boarding point and trip updates.{" "}
-            <span className="font-bold text-[#8a6d00]">
-              You can fill this only once — after saving, contact the transport office (admin/faculty) to change it.
-            </span>
+            Your profile is managed by the transport office. Contact admin to update your details.
           </p>
         </CardHeader>
-        <CardContent className="p-6">
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-name" className="text-xs font-semibold text-slate-600">
-                  Full Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="setup-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter your full name"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-roll" className="text-xs font-semibold text-slate-600">
-                  Roll Number <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="setup-roll"
-                  value={rollNo}
-                  onChange={(e) => setRollNo(e.target.value)}
-                  placeholder="e.g. 21CS101"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-phone" className="text-xs font-semibold text-slate-600">
-                  Phone Number <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="setup-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. 9876543210"
-                  pattern="[0-9+ -]{10,15}"
-                  title="Enter a valid mobile number"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-dept" className="text-xs font-semibold text-slate-600">
-                  Department <span className="text-slate-400">(optional)</span>
-                </Label>
-                <Input
-                  id="setup-dept"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  placeholder="e.g. CSE"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-year" className="text-xs font-semibold text-slate-600">
-                  Year <span className="text-slate-400">(optional)</span>
-                </Label>
-                <Input
-                  id="setup-year"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  placeholder="e.g. 3rd Year"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-section" className="text-xs font-semibold text-slate-600">
-                  Section <span className="text-slate-400">(optional)</span>
-                </Label>
-                <Input
-                  id="setup-section"
-                  value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  placeholder="e.g. A"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-route" className="text-xs font-semibold text-slate-600">
-                  Bus Route Number <span className="text-red-500">*</span>
-                </Label>
-                <Select value={routeNumber} onValueChange={(v) => { setRouteNumber(v); setBoardingStop(""); }}>
-                  <SelectTrigger id="setup-route" className={routeNumber ? "font-semibold" : "text-muted-foreground"}>
-                    <SelectValue placeholder={routesQuery.isLoading ? "Loading routes…" : "Select your route"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {routes
-                      .slice()
-                      .sort((a, b) => a.routeNumber - b.routeNumber)
-                      .map((r) => (
-                        <SelectItem key={r.routeNumber} value={String(r.routeNumber)}>
-                          Route {r.routeNumber} — {r.boardingPoints[0]?.name ?? "College"}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="setup-stop" className="text-xs font-semibold text-slate-600">
-                  Boarding Point <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={boardingStop}
-                  onValueChange={setBoardingStop}
-                  disabled={!routeNumber || boardingPoints.length === 0}
+        <CardContent className="space-y-6 p-6">
+          <div>
+            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-[#1a237e]">
+              <UserRound className="h-3.5 w-3.5" />
+              Personal Details
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoField icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} label="Full Name" value={profile.name} />
+              <InfoField icon={<Mail className="h-3.5 w-3.5 text-[#1a237e]" />} label="Email" value={profile.email} />
+              <InfoField icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} label="Register Number" value={profile.registerNumber} />
+              <InfoField icon={<Phone className="h-3.5 w-3.5 text-[#1a237e]" />} label="Phone" value={profile.phone || "—"} />
+              <InfoField label="Department" value={profile.department || "—"} />
+              <InfoField label="Year" value={profile.year || "—"} />
+              <InfoField label="Section" value={profile.section || "—"} />
+              <InfoField label="Gender" value={profile.gender || "—"} />
+              <InfoField label="Status">
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] ${
+                    profile.status === "ACTIVE"
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : "border-slate-200 bg-slate-100 text-slate-600"
+                  }`}
                 >
-                  <SelectTrigger id="setup-stop" className={boardingStop ? "font-semibold" : "text-muted-foreground"}>
-                    <SelectValue
-                      placeholder={routeNumber ? (boardingPoints.length === 0 ? "No stops on this route" : "Select your boarding point") : "Select a route first"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {boardingPoints.map((p) => (
-                      <SelectItem key={p.name} value={p.name}>
-                        {p.name} {p.time ? `— ${p.time}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  {profile.status}
+                </Badge>
+              </InfoField>
             </div>
+          </div>
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          <div>
+            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-[#1a237e]">
+              <Bus className="h-3.5 w-3.5" />
+              Transport Details
+            </h3>
+            {bus ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-[#1a237e] to-[#283593] p-4 text-white shadow-md">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-[#FFD700] ring-1 ring-white/20">
+                    <Bus className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-extrabold tracking-wide">{bus.registrationNumber}</p>
+                    <p className="text-xs font-semibold text-white/70">
+                      Route {bus.busNumber} · {bus.status}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoField label="Driver" value={bus.driver?.name || "—"} />
+                  <InfoField label="Driver Phone" value={bus.driver?.phone || "—"} />
+                  <InfoField
+                    icon={<MapPin className="h-3.5 w-3.5 text-[#1a237e]" />}
+                    label="Boarding Stop"
+                    value={busStop?.name || "—"}
+                  />
+                  {route && (
+                    <InfoField
+                      icon={<CalendarDays className="h-3.5 w-3.5 text-[#1a237e]" />}
+                      label="Route"
+                      value={`${route.routeCode} — ${route.routeName}`}
+                    />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                {error}
+                No bus has been assigned to your profile yet. Contact the transport office.
               </div>
             )}
+          </div>
 
-            <Button
-              type="submit"
-              disabled={submitting || routesQuery.isLoading}
-              className="w-full gap-2 bg-gradient-to-r from-[#FFD700] to-[#FFC107] font-bold text-[#1a237e] shadow-lg hover:opacity-90"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {submitting ? "Saving…" : "Save & Continue"}
-            </Button>
+          <div>
+            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-[#1a237e]">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Assignment Info
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoField label="Transport Status" value={transport?.status || "—"} />
+              <InfoField label="Assignment Start" value={transport?.startDate ? formatDateTime(transport.startDate) : "—"} />
+            </div>
+          </div>
 
-            <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              After saving, your profile is locked. To change it, contact the admin or your faculty coordinator.
-            </p>
-          </form>
+          <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Your profile is managed by the transport office. To update your details, contact the admin or your faculty coordinator.
+          </p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function InfoField({
+  icon,
+  label,
+  value,
+  children,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-0.5 flex items-center gap-1.5 truncate text-sm font-bold text-foreground">
+        {icon}
+        {children ?? <span className="truncate">{value}</span>}
+      </div>
     </div>
   );
 }

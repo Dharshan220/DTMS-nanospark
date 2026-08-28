@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ImageIcon, MessageSquareWarning, Trash2 } from "lucide-react";
+import { ArrowLeft, MessageSquareWarning } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import PageHeader from "@/components/faculty/PageHeader";
-import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
+import { PageError, PageSkeleton } from "@/components/faculty/DataState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -18,52 +17,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import DeleteConfirm from "@/components/admin/DeleteConfirm";
 import { ComplaintStatusBadge } from "@/components/faculty/Badges";
 import { formatDateTime } from "@/lib/faculty";
 import type { Complaint, ComplaintStatus } from "@/types/faculty";
 
-const STATUS_LABELS: Record<ComplaintStatus, string> = {
-  pending: "Pending",
-  under_review: "Under Review",
-  in_progress: "In Progress",
-  resolved: "Resolved",
-  escalated: "Escalated",
+const STATUS_OPTIONS: Record<ComplaintStatus, { label: string; next: ComplaintStatus[] }> = {
+  OPEN: { label: "Open", next: ["IN_REVIEW", "REJECTED"] },
+  IN_REVIEW: { label: "In Review", next: ["RESOLVED", "REJECTED"] },
+  RESOLVED: { label: "Resolved", next: [] },
+  REJECTED: { label: "Rejected", next: [] },
 };
 
 export default function AdminComplaintDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<ComplaintStatus | "">("");
-  const [response, setResponse] = useState("");
-  const [deleting, setDeleting] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState("");
 
   const query = useQuery({
     queryKey: ["admin-complaint", id],
-    queryFn: () => api.get<{ complaint: Complaint }>(`/complaints/${id}`),
+    queryFn: () => api.get<Complaint>(`/admin/complaints/${id}`),
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { status: ComplaintStatus; response?: string }) =>
-      api.put<{ complaint: Complaint }>(`/complaints/${id}/status`, payload),
+    mutationFn: (payload: { status?: ComplaintStatus; resolutionNote?: string }) =>
+      api.patch<Complaint>(`/admin/complaints/${id}`, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-complaint", id] });
       void queryClient.invalidateQueries({ queryKey: ["admin-complaints"] });
       setStatus("");
-      setResponse("");
+      setResolutionNote("");
       toast.success("Complaint updated");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update complaint"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => api.del(`/complaints/${id}`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-complaints"] });
-      toast.success("Complaint deleted");
-      window.history.back();
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not delete complaint"),
   });
 
   if (query.isLoading) return <PageSkeleton rows={6} />;
@@ -71,7 +57,8 @@ export default function AdminComplaintDetailPage() {
     return <PageError message="Could not load this complaint." onRetry={() => void query.refetch()} />;
   }
 
-  const c = query.data!.complaint;
+  const c = query.data!;
+  const allowedStatuses = STATUS_OPTIONS[c.status]?.next ?? [];
 
   return (
     <>
@@ -100,45 +87,28 @@ export default function AdminComplaintDetailPage() {
             <div className="rounded-xl border border-border bg-secondary/40 p-4 text-sm leading-relaxed">
               {c.description}
             </div>
-            {c.imageUrl ? (
-              <div>
-                <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  <ImageIcon className="h-3 w-3" /> Attached photo
-                </p>
-                <img
-                  src={c.imageUrl}
-                  alt="Complaint"
-                  className="max-h-64 rounded-xl border border-border object-contain"
-                />
-              </div>
-            ) : null}
             <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Student</p>
-                <p className="mt-0.5 font-bold">{c.name}</p>
+                <p className="mt-0.5 font-bold">{c.student?.name ?? "—"}</p>
               </div>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Roll no</p>
-                <p className="mt-0.5 font-bold">{c.studentRollNo ?? "—"}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Register no</p>
+                <p className="mt-0.5 font-bold">{c.student?.registerNumber ?? "—"}</p>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route</p>
-                <p className="mt-0.5 font-bold">{c.routeNumber ? `Route ${c.routeNumber}` : "—"}</p>
+                <p className="mt-0.5 font-bold">{c.route?.routeCode ? `Route ${c.route.routeCode}` : "—"}</p>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Submitted</p>
                 <p className="mt-0.5 font-bold">{formatDateTime(c.createdAt)}</p>
               </div>
             </div>
-            {c.studentDepartment || c.studentYear ? (
-              <p className="text-[11px] text-muted-foreground">
-                {[c.studentDepartment, c.studentYear, c.studentBoardingStop].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
-            {c.adminResponse ? (
+            {c.resolutionNote ? (
               <div className="rounded-xl border border-green-200 bg-green-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Admin response</p>
-                <p className="mt-1 text-sm text-green-900">{c.adminResponse}</p>
+                <p className="mt-1 text-sm text-green-900">{c.resolutionNote}</p>
               </div>
             ) : null}
           </CardContent>
@@ -154,11 +124,17 @@ export default function AdminComplaintDetailPage() {
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   New status
                 </Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as ComplaintStatus)}>
-                  <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                <Select
+                  value={status}
+                  onValueChange={(v) => setStatus(v as ComplaintStatus)}
+                  disabled={allowedStatuses.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={allowedStatuses.length === 0 ? "No status changes available" : "Select status"} />
+                  </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(STATUS_LABELS) as ComplaintStatus[]).map((s) => (
-                      <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                    {allowedStatuses.map((s) => (
+                      <SelectItem key={s} value={s}>{STATUS_OPTIONS[s].label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -168,78 +144,68 @@ export default function AdminComplaintDetailPage() {
                   Response to student
                 </Label>
                 <Textarea
-                  value={response}
-                  onChange={(e) => setResponse(e.target.value)}
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
                   rows={3}
                   placeholder="Optional reply that the student will see…"
                 />
               </div>
               <Button
                 className="w-full gap-2 bg-[#1a237e] text-white hover:bg-[#283593]"
-                disabled={updateMutation.isPending || (!status && !response.trim())}
+                disabled={updateMutation.isPending || (!status && !resolutionNote.trim())}
                 onClick={() => {
-                  if (!status && !response.trim()) return;
-                  updateMutation.mutate({
-                    status: (status || c.status) as ComplaintStatus,
-                    ...(response.trim() ? { response: response.trim() } : {}),
-                  });
+                  if (!status && !resolutionNote.trim()) return;
+                  const payload: { status?: ComplaintStatus; resolutionNote?: string } = {};
+                  if (status) payload.status = status as ComplaintStatus;
+                  if (resolutionNote.trim()) payload.resolutionNote = resolutionNote.trim();
+                  updateMutation.mutate(payload);
                 }}
               >
                 {updateMutation.isPending ? "Saving…" : "Save Update"}
               </Button>
               <p className="text-[11px] text-muted-foreground">
-                The student is notified automatically. Escalated complaints also alert the transport department.
+                The student is notified automatically.
               </p>
             </CardContent>
           </Card>
 
           <Card className="shadow-card">
             <CardHeader>
-              <CardTitle className="text-sm font-extrabold">History</CardTitle>
+              <CardTitle className="text-sm font-extrabold">Details</CardTitle>
             </CardHeader>
-            <CardContent>
-              {c.history.length === 0 ? (
-                <EmptyState message="No history yet." />
-              ) : (
-                <ol className="space-y-3">
-                  {c.history.map((h, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${i === c.history.length - 1 ? "bg-[#1a237e]" : "bg-muted-foreground/40"}`} />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold capitalize">{h.status.replace("_", " ")}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {h.byName ?? h.by} · {formatDateTime(h.at)}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+            <CardContent className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Priority</span>
+                <span className="font-bold uppercase">{c.priority}</span>
+              </div>
+              {c.bus && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bus</span>
+                  <span className="font-bold">Bus {c.bus.busNumber}</span>
+                </div>
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-red-200 shadow-card">
-            <CardContent className="pt-6">
-              <Button
-                variant="outline"
-                className="w-full gap-2 text-destructive hover:text-destructive"
-                onClick={() => setDeleting(true)}
-              >
-                <Trash2 className="h-4 w-4" /> Delete Complaint
-              </Button>
+              {c.driver && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Driver</span>
+                  <span className="font-bold">{c.driver.name}</span>
+                </div>
+              )}
+              {c.busStop && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Bus Stop</span>
+                  <span className="font-bold">{c.busStop.name}</span>
+                </div>
+              )}
+              {c.resolvedAt && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Resolved at</span>
+                  <span className="font-bold">{formatDateTime(c.resolvedAt)}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <DeleteConfirm
-        open={deleting}
-        onOpenChange={setDeleting}
-        title="Delete this complaint?"
-        description={`The ${c.category} complaint by ${c.name} will be permanently removed.`}
-        onConfirm={() => deleteMutation.mutate()}
-        deleting={deleteMutation.isPending}
-      />
     </>
   );
 }

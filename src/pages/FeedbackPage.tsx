@@ -75,32 +75,19 @@ export default function FeedbackPage() {
     e.preventDefault();
     if (!department.trim() || !year || !section.trim() || !category || !description.trim()) return;
 
-    const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-    const formData = new FormData();
-    formData.append("name", name.trim() || "Anonymous");
-    formData.append("department", department.trim());
-    formData.append("year", year);
-    formData.append("section", section.trim());
-    formData.append("routeNumber", routeNumber);
-    formData.append("category", category);
-    formData.append("description", description.trim());
-    if (imageFile) formData.append("image", imageFile);
-
     setLoading(true);
     setSubmitError("");
 
     try {
-      const res = await fetch(`${baseUrl}/api/feedback`, {
-        method: "POST",
-        body: formData,
+      const { api } = await import("@/lib/api");
+      await api.post("/student/feedback", {
+        subject: `${category} - ${department}`,
+        message: description.trim(),
+        rating: 5,
+        category: "OTHER",
       });
-
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Failed to submit feedback.");
-      }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Unable to submit feedback right now.");
+      setSubmitError(err instanceof Error ? err.message : "Unable to submit feedback right now. Please log in first.");
       setLoading(false);
       return;
     }

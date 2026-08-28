@@ -22,13 +22,13 @@ export default function RequireRole({ roles, children }: { roles: ServerRole[]; 
   }
 
   if (!roles.includes(user.role)) {
-    if (user.role === "admin" && location.pathname.startsWith("/faculty")) {
+    if (user.role === "ADMIN" && location.pathname.startsWith("/faculty")) {
       return <Navigate to="/admin" replace />;
     }
-    if (user.role === "student" && location.pathname.startsWith("/faculty")) {
+    if (user.role === "STUDENT" && location.pathname.startsWith("/faculty")) {
       return <Navigate to="/student" replace />;
     }
-    return <Navigate to={user.role === "student" ? "/student" : "/"} replace />;
+    return <Navigate to={user.role === "STUDENT" ? "/student" : user.role === "FACULTY" ? "/faculty" : "/admin"} replace />;
   }
 
   return <>{children}</>;

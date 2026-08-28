@@ -118,7 +118,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/student"
           element={
-            <RequireRole roles={["student"]}>
+            <RequireRole roles={["STUDENT"]}>
               <StudentPanel />
             </RequireRole>
           }
@@ -131,7 +131,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/faculty"
           element={
-            <RequireRole roles={["teacher"]}>
+            <RequireRole roles={["FACULTY"]}>
               <FacultyLayout />
             </RequireRole>
           }
@@ -151,7 +151,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/admin"
           element={
-            <RequireRole roles={["admin"]}>
+            <RequireRole roles={["ADMIN"]}>
               <AdminLayout />
             </RequireRole>
           }

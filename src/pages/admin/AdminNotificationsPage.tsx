@@ -19,40 +19,42 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDateTime, formatRelative } from "@/lib/faculty";
-import type { BusInfo, NotificationItem, RouteInfo, ServerRole } from "@/types/faculty";
+import type { BusInfo, NotificationItem, RouteInfo } from "@/types/faculty";
 
-type Target = "all" | "roles" | "route" | "bus";
+type Target = "ALL_USERS" | "ALL_STUDENTS" | "ALL_FACULTY" | "SPECIFIC_ROUTE" | "SPECIFIC_BUS";
 
 export default function AdminNotificationsPage() {
   const queryClient = useQueryClient();
-  const [target, setTarget] = useState<Target>("all");
-  const [roles, setRoles] = useState<string[]>([]);
-  const [routeNumber, setRouteNumber] = useState("");
+  const [target, setTarget] = useState<Target>("ALL_USERS");
+  const [routeId, setRouteId] = useState("");
   const [busId, setBusId] = useState("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
   const notificationsQuery = useQuery({
     queryKey: ["admin-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryFn: () => api.get<{ data: NotificationItem[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>("/admin/notifications?page=1&limit=20"),
     refetchInterval: 30000,
   });
   const routesQuery = useQuery({
     queryKey: ["admin-routes"],
-    queryFn: () => api.get<{ items: RouteInfo[]; total: number }>("/transport"),
+    queryFn: () => api.get<{ data: RouteInfo[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>("/admin/routes?page=1&limit=100"),
   });
   const busesQuery = useQuery({
     queryKey: ["admin-buses"],
-    queryFn: () => api.get<{ items: BusInfo[]; total: number }>("/buses"),
+    queryFn: () => api.get<{ data: BusInfo[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>("/admin/buses?page=1&limit=100"),
   });
 
   const sendMutation = useMutation({
     mutationFn: () => {
-      const payload: Record<string, unknown> = { title: title.trim(), body: body.trim() };
-      if (target === "roles") payload.roles = roles;
-      if (target === "route") payload.routeNumber = Number(routeNumber);
-      if (target === "bus") payload.busId = busId;
-      return api.post<{ message: string; count: number }>("/notifications", payload);
+      const payload: Record<string, unknown> = {
+        title: title.trim(),
+        message: body.trim(),
+        target,
+      };
+      if (target === "SPECIFIC_ROUTE") payload.targetId = routeId;
+      if (target === "SPECIFIC_BUS") payload.targetId = busId;
+      return api.post<{ message: string }>("/admin/notifications/announcement", payload);
     },
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
@@ -73,19 +75,17 @@ export default function AdminNotificationsPage() {
     );
   }
 
-  const items = notificationsQuery.data!.items;
-  const unread = notificationsQuery.data!.unread;
+  const items = notificationsQuery.data!.data;
+  const unread = items.filter((n) => !n.readAt).length;
 
-  const toggleRole = (role: string) => {
-    setRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
-  };
+  const isTargetRoute = target === "SPECIFIC_ROUTE";
+  const isTargetBus = target === "SPECIFIC_BUS";
 
   const valid =
     title.trim().length > 2 &&
     body.trim().length > 2 &&
-    (target !== "roles" || roles.length > 0) &&
-    (target !== "route" || routeNumber !== "") &&
-    (target !== "bus" || busId !== "");
+    (!isTargetRoute || routeId !== "") &&
+    (!isTargetBus || busId !== "");
 
   return (
     <>
@@ -110,45 +110,31 @@ export default function AdminNotificationsPage() {
               <Select value={target} onValueChange={(v) => setTarget(v as Target)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Everyone (all users)</SelectItem>
-                  <SelectItem value="roles">A role group</SelectItem>
-                  <SelectItem value="route">One route</SelectItem>
-                  <SelectItem value="bus">One bus</SelectItem>
+                  <SelectItem value="ALL_USERS">Everyone (all users)</SelectItem>
+                  <SelectItem value="ALL_STUDENTS">All Students</SelectItem>
+                  <SelectItem value="ALL_FACULTY">All Faculty</SelectItem>
+                  <SelectItem value="SPECIFIC_ROUTE">One route</SelectItem>
+                  <SelectItem value="SPECIFIC_BUS">One bus</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {target === "roles" ? (
-              <div className="flex flex-wrap gap-2">
-                {(["student", "teacher", "parent"] as ServerRole[]).map((r) => (
-                  <Button
-                    key={r}
-                    variant={roles.includes(r) ? "default" : "outline"}
-                    size="sm"
-                    className={roles.includes(r) ? "bg-[#1a237e] text-white hover:bg-[#283593]" : ""}
-                    onClick={() => toggleRole(r)}
-                  >
-                    {r === "teacher" ? "Faculty" : r.charAt(0).toUpperCase() + r.slice(1) + "s"}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
-            {target === "route" ? (
-              <Select value={routeNumber} onValueChange={setRouteNumber}>
+            {isTargetRoute ? (
+              <Select value={routeId} onValueChange={setRouteId}>
                 <SelectTrigger><SelectValue placeholder="Select route" /></SelectTrigger>
                 <SelectContent>
-                  {routesQuery.data!.items.map((r) => (
-                    <SelectItem key={r.id} value={String(r.routeNumber)}>Route {r.routeNumber}</SelectItem>
+                  {routesQuery.data!.data.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.routeCode} — {r.routeName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : null}
-            {target === "bus" ? (
+            {isTargetBus ? (
               <Select value={busId} onValueChange={setBusId}>
                 <SelectTrigger><SelectValue placeholder="Select bus" /></SelectTrigger>
                 <SelectContent>
-                  {busesQuery.data!.items.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>Route {b.routeNumber} · {b.vehicleNumber}</SelectItem>
+                  {busesQuery.data!.data.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.busNumber} · {b.registrationNumber}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -188,17 +174,17 @@ export default function AdminNotificationsPage() {
                 {items.map((n) => (
                   <li key={n.id} className="flex flex-col gap-1 py-3">
                     <div className="flex items-center gap-2">
-                      <Bell className={`h-3.5 w-3.5 ${n.read ? "text-muted-foreground/50" : "text-[#FFD700]"}`} />
-                      <span className={`text-xs font-bold ${n.read ? "text-muted-foreground" : "text-foreground"}`}>
+                      <Bell className={`h-3.5 w-3.5 ${n.readAt ? "text-muted-foreground/50" : "text-[#FFD700]"}`} />
+                      <span className={`text-xs font-bold ${n.readAt ? "text-muted-foreground" : "text-foreground"}`}>
                         {n.title}
                       </span>
                       <Badge variant="outline" className="ml-auto border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
                         {n.type}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">{n.body}</p>
+                    <p className="text-xs text-muted-foreground">{n.message}</p>
                     <p className="text-[11px] text-muted-foreground/70">
-                      {n.read ? "Read" : "Unread"} · {formatRelative(n.createdAt)} · {formatDateTime(n.createdAt)}
+                      {n.readAt ? "Read" : "Unread"} · {formatRelative(n.createdAt)} · {formatDateTime(n.createdAt)}
                     </p>
                   </li>
                 ))}

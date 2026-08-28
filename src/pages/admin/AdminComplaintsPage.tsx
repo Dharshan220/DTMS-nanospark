@@ -25,27 +25,19 @@ import {
 } from "@/components/ui/table";
 import { ComplaintStatusBadge } from "@/components/faculty/Badges";
 import { formatDateTime } from "@/lib/faculty";
-import type { Complaint, ComplaintStatus } from "@/types/faculty";
+import type { Complaint, ComplaintStatus, Feedback } from "@/types/faculty";
 
 const TABS: { value: ComplaintStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "resolved", label: "Resolved" },
-  { value: "escalated", label: "Escalated" },
+  { value: "OPEN", label: "Pending" },
+  { value: "IN_REVIEW", label: "In Review" },
+  { value: "RESOLVED", label: "Resolved" },
+  { value: "REJECTED", label: "Rejected" },
 ];
 
-/** Radix Select forbids empty-string item values; use a sentinel for "all categories". */
-const ALL_CATEGORIES = "__all__";
+const CATEGORIES = ["BUS", "DRIVER", "ROUTE", "BUS_STOP", "ATTENDANCE", "SAFETY", "OTHER"];
 
-interface FeedbackItem {
-  id: string;
-  name: string;
-  routeNumber: number | null;
-  rating: number;
-  message: string;
-  createdAt: number;
-}
+const ALL_CATEGORIES = "__all__";
 
 export default function AdminComplaintsPage() {
   const [tab, setTab] = useState<ComplaintStatus | "all">("all");
@@ -54,34 +46,34 @@ export default function AdminComplaintsPage() {
   const complaintsQuery = useQuery({
     queryKey: ["admin-complaints", tab, category],
     queryFn: () =>
-      api.get<{ items: Complaint[]; total: number }>(
-        `/complaints?status=${tab === "all" ? "" : tab}&category=${encodeURIComponent(category)}`
+      api.get<{ data: Complaint[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
+        `/admin/complaints?page=1&limit=20&status=${tab === "all" ? "" : tab}&category=${encodeURIComponent(category)}`
       ),
   });
-  const categoriesQuery = useQuery({
-    queryKey: ["complaint-categories"],
-    queryFn: () => api.get<{ categories: string[] }>("/complaints/categories"),
-  });
+
   const feedbackQuery = useQuery({
     queryKey: ["admin-feedback"],
-    queryFn: () => api.get<{ items: FeedbackItem[]; total: number }>("/feedback"),
+    queryFn: () =>
+      api.get<{ data: Feedback[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
+        "/admin/feedback?page=1&limit=10"
+      ),
   });
 
-  if (complaintsQuery.isLoading || categoriesQuery.isLoading || feedbackQuery.isLoading) {
+  if (complaintsQuery.isLoading || feedbackQuery.isLoading) {
     return <PageSkeleton rows={6} />;
   }
-  if (complaintsQuery.isError || categoriesQuery.isError || feedbackQuery.isError) {
+  if (complaintsQuery.isError || feedbackQuery.isError) {
     return (
       <PageError
         message="Could not load complaints."
-        onRetry={() => { void complaintsQuery.refetch(); void categoriesQuery.refetch(); void feedbackQuery.refetch(); }}
+        onRetry={() => { void complaintsQuery.refetch(); void feedbackQuery.refetch(); }}
       />
     );
   }
 
-  const complaints = complaintsQuery.data!.items;
-  const categories = categoriesQuery.data!.categories;
-  const feedback = feedbackQuery.data!.items;
+  const complaints = complaintsQuery.data!.data;
+  const totalComplaints = complaintsQuery.data!.pagination.total;
+  const feedback = feedbackQuery.data!.data;
 
   return (
     <>
@@ -94,7 +86,7 @@ export default function AdminComplaintsPage() {
         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
             <MessageSquareWarning className="h-4 w-4 text-[#1a237e]" />
-            Complaints ({complaintsQuery.data!.total})
+            Complaints ({totalComplaints})
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-xl border border-border bg-secondary/40 p-1">
@@ -115,7 +107,7 @@ export default function AdminComplaintsPage() {
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
-                {categories.map((c) => (
+                {CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
@@ -143,8 +135,8 @@ export default function AdminComplaintsPage() {
                   {complaints.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell>
-                        <p className="font-bold">{c.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{c.studentRollNo ?? c.role}</p>
+                        <p className="font-bold">{c.student?.name ?? "—"}</p>
+                        <p className="text-[11px] text-muted-foreground">{c.student?.registerNumber ?? "—"}</p>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
@@ -154,7 +146,7 @@ export default function AdminComplaintsPage() {
                       <TableCell className="max-w-[260px]">
                         <p className="line-clamp-2 text-xs text-muted-foreground">{c.description}</p>
                       </TableCell>
-                      <TableCell>{c.routeNumber ? `Route ${c.routeNumber}` : "—"}</TableCell>
+                      <TableCell>{c.route?.routeCode ? `Route ${c.route.routeCode}` : "—"}</TableCell>
                       <TableCell><ComplaintStatusBadge status={c.status} /></TableCell>
                       <TableCell className="text-xs">{formatDateTime(c.createdAt)}</TableCell>
                       <TableCell className="text-right">
@@ -186,9 +178,8 @@ export default function AdminComplaintsPage() {
               {feedback.map((f) => (
                 <li key={f.id} className="flex flex-col gap-1 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-foreground">{f.name}</span>
+                    <span className="text-xs font-bold text-foreground">{f.student?.name ?? "—"}</span>
                     <span className="text-xs text-amber-500">{"★".repeat(f.rating)}</span>
-                    {f.routeNumber ? <span className="text-[11px] text-muted-foreground">Route {f.routeNumber}</span> : null}
                     <span className="ml-auto text-[11px] text-muted-foreground">{formatDateTime(f.createdAt)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{f.message}</p>

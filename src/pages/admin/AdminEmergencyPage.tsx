@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, MapPin, Phone, Siren, Trash2, UserRound } from "lucide-react";
+import { CheckCircle2, MapPin, Phone, Siren, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import PageHeader from "@/components/faculty/PageHeader";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -16,13 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import DeleteConfirm from "@/components/admin/DeleteConfirm";
 import {
   EmergencyStatusBadge,
   EmergencyTypeBadge,
 } from "@/components/admin/AdminBadges";
 import { formatDateTime, formatRelative } from "@/lib/faculty";
-import type { EmergencyReport, EmergencyStatus } from "@/types/faculty";
+import type { EmergencyReport, EmergencyStatus, Paginated } from "@/types/faculty";
 
 const TRANSPORT_OFFICE_PHONE = "9962022222";
 
@@ -31,39 +29,36 @@ export default function AdminEmergencyPage() {
   const [filter, setFilter] = useState<EmergencyStatus | "active" | "all">("active");
   const [response, setResponse] = useState("");
   const [target, setTarget] = useState<EmergencyReport | null>(null);
-  const [deleting, setDeleting] = useState<EmergencyReport | null>(null);
 
   const query = useQuery({
     queryKey: ["admin-emergencies"],
-    queryFn: () => api.get<{ items: EmergencyReport[]; total: number; activeCount: number; active: EmergencyReport[] }>("/emergencies"),
+    queryFn: () => api.get<Paginated<EmergencyReport>>("/admin/emergency", { params: { page: 1, limit: 100 } }),
     refetchInterval: 20000,
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: EmergencyStatus }) =>
-      api.put<{ emergency: EmergencyReport }>(`/emergencies/${id}`, {
-        status,
-        ...(response.trim() ? { response: response.trim() } : {}),
-      }),
+  const acknowledgeMutation = useMutation({
+    mutationFn: (id: string) => api.patch<EmergencyReport>(`/admin/emergency/${id}/acknowledge`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-emergencies"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
       setTarget(null);
       setResponse("");
-      toast.success("Emergency updated");
+      toast.success("Emergency acknowledged");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update emergency"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not acknowledge emergency"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.del(`/emergencies/${id}`),
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, resolutionNote }: { id: string; resolutionNote?: string }) =>
+      api.patch<EmergencyReport>(`/admin/emergency/${id}/resolve`, { resolutionNote }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-emergencies"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      setDeleting(null);
-      toast.success("Emergency report deleted");
+      setTarget(null);
+      setResponse("");
+      toast.success("Emergency resolved");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not delete report"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not resolve emergency"),
   });
 
   if (query.isLoading) return <PageSkeleton rows={6} />;
@@ -71,24 +66,23 @@ export default function AdminEmergencyPage() {
     return <PageError message="Could not load emergency reports." onRetry={() => void query.refetch()} />;
   }
 
-  const items = query.data!.items;
+  const items = query.data!.data;
   const visible = items.filter((e) => {
     if (filter === "all") return true;
-    if (filter === "active") return e.status === "active" || e.status === "acknowledged";
+    if (filter === "active") return e.status === "ACTIVE" || e.status === "ACKNOWLEDGED";
     return e.status === filter;
   });
 
-  const respond = (e: EmergencyReport, status: EmergencyStatus) => {
-    setTarget(e);
-    setResponse(status === "resolved" ? (e.adminResponse ?? "") : "");
-    updateMutation.mutate({ id: e.id, status });
-  };
+  const activeCount = items.filter((e) => e.status === "ACTIVE" || e.status === "ACKNOWLEDGED").length;
+
+  const getReporterName = (e: EmergencyReport) => e.student?.name ?? e.faculty?.name ?? "Unknown";
+  const getBusLabel = (e: EmergencyReport) => e.bus ? `Bus ${e.bus.busNumber}` : "Bus —";
 
   return (
     <>
       <PageHeader
         title="Emergency / SOS"
-        description={`${query.data!.activeCount} open emergencies — acknowledge, respond and resolve them.`}
+        description={`${activeCount} open emergencies — acknowledge, respond and resolve them.`}
         actions={
           <a
             href={`tel:${TRANSPORT_OFFICE_PHONE}`}
@@ -103,15 +97,15 @@ export default function AdminEmergencyPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700">Active</p>
-          <p className="text-2xl font-extrabold text-red-700">{items.filter((e) => e.status === "active").length}</p>
+          <p className="text-2xl font-extrabold text-red-700">{items.filter((e) => e.status === "ACTIVE").length}</p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Acknowledged</p>
-          <p className="text-2xl font-extrabold text-amber-700">{items.filter((e) => e.status === "acknowledged").length}</p>
+          <p className="text-2xl font-extrabold text-amber-700">{items.filter((e) => e.status === "ACKNOWLEDGED").length}</p>
         </div>
         <div className="rounded-xl border border-green-200 bg-green-50 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-green-700">Resolved</p>
-          <p className="text-2xl font-extrabold text-green-700">{items.filter((e) => e.status === "resolved").length}</p>
+          <p className="text-2xl font-extrabold text-green-700">{items.filter((e) => e.status === "RESOLVED").length}</p>
         </div>
       </div>
 
@@ -140,7 +134,7 @@ export default function AdminEmergencyPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-extrabold text-foreground">
-                        {e.busNumber ? `Bus ${e.busNumber}` : "Bus —"}
+                        {getBusLabel(e)}
                       </span>
                       <EmergencyTypeBadge type={e.type} />
                       <EmergencyStatusBadge status={e.status} />
@@ -148,54 +142,45 @@ export default function AdminEmergencyPage() {
                         {formatRelative(e.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{e.description}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{e.message}</p>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground/80">
                       <span className="flex items-center gap-1">
-                        <UserRound className="h-3 w-3" /> {e.reportedByName}
+                        <UserRound className="h-3 w-3" /> {getReporterName(e)}
                       </span>
                       <span className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" /> {e.location ?? "Location not shared"}
+                        <MapPin className="h-3 w-3" /> {e.latitude != null && e.longitude != null ? `${e.latitude}, ${e.longitude}` : "Location not shared"}
                       </span>
                       <span>{formatDateTime(e.createdAt)}</span>
                     </div>
-                    {e.adminResponse ? (
+                    {e.resolutionNote ? (
                       <p className="mt-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900">
-                        <span className="font-bold">Response:</span> {e.adminResponse}
+                        <span className="font-bold">Response:</span> {e.resolutionNote}
                       </p>
                     ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    {e.status === "active" ? (
+                    {e.status === "ACTIVE" ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
-                        onClick={() => respond(e, "acknowledged")}
-                        disabled={updateMutation.isPending}
+                        onClick={() => acknowledgeMutation.mutate(e.id)}
+                        disabled={acknowledgeMutation.isPending}
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" /> Acknowledge
                       </Button>
                     ) : null}
-                    {e.status !== "resolved" ? (
+                    {e.status !== "RESOLVED" && e.status !== "CANCELLED" ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
-                        onClick={() => setTarget(e)}
-                        disabled={updateMutation.isPending}
+                        onClick={() => { setTarget(e); setResponse(""); }}
+                        disabled={resolveMutation.isPending}
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" /> Resolve
                       </Button>
                     ) : null}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setDeleting(e)}
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
                 </li>
               ))}
@@ -221,24 +206,15 @@ export default function AdminEmergencyPage() {
           />
           <Button
             className="gap-2 bg-[#1a237e] text-white hover:bg-[#283593]"
-            disabled={updateMutation.isPending || !target}
-            onClick={() => { if (target) updateMutation.mutate({ id: target.id, status: "resolved" }); }}
+            disabled={resolveMutation.isPending || !target}
+            onClick={() => { if (target) resolveMutation.mutate({ id: target.id, resolutionNote: response.trim() || undefined }); }}
           >
             Mark Resolved
           </Button>
         </CardContent>
       </Card>
 
-      <DeleteConfirm
-        open={deleting !== null}
-        onOpenChange={(o) => { if (!o) setDeleting(null); }}
-        title="Delete emergency report?"
-        description={`The ${deleting?.type} report for ${deleting?.busNumber ?? "unknown bus"} will be removed.`}
-        onConfirm={() => { if (deleting) deleteMutation.mutate(deleting.id); }}
-        deleting={deleteMutation.isPending}
-      />
-
-      {target && target.status !== "resolved" ? (
+      {target && target.status !== "RESOLVED" && target.status !== "CANCELLED" ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTarget(null)}>
           <Card className="w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
@@ -249,7 +225,7 @@ export default function AdminEmergencyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                {target.busNumber ?? "Bus —"} · {target.description}
+                {getBusLabel(target)} · {target.message}
               </p>
               <Textarea
                 value={response}
@@ -261,10 +237,10 @@ export default function AdminEmergencyPage() {
                 <Button variant="outline" onClick={() => setTarget(null)}>Cancel</Button>
                 <Button
                   className="gap-2 bg-green-600 text-white hover:bg-green-700"
-                  disabled={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate({ id: target.id, status: "resolved" })}
+                  disabled={resolveMutation.isPending}
+                  onClick={() => resolveMutation.mutate({ id: target.id, resolutionNote: response.trim() || undefined })}
                 >
-                  {updateMutation.isPending ? "Saving…" : "Mark Resolved"}
+                  {resolveMutation.isPending ? "Saving…" : "Mark Resolved"}
                 </Button>
               </div>
             </CardContent>

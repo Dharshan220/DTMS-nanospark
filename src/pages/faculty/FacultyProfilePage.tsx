@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, Bus, Mail, MapPin, Phone, Route as RouteIcon, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,62 +7,76 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { initials } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import { PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { AuthUser, DashboardResponse } from "@/types/faculty";
+import type { FacultyProfile } from "@/types/faculty";
 
 export default function FacultyProfilePage() {
-  const { user, refresh } = useAuth();
-  const [name, setName] = useState(user?.name ?? "");
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [saving, setSaving] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [initialized, setInitialized] = useState(false);
 
-  const dashQuery = useQuery({
-    queryKey: ["faculty-dashboard"],
-    queryFn: () => api.get<DashboardResponse>("/dashboard"),
+  const profileQuery = useQuery({
+    queryKey: ["faculty-profile"],
+    queryFn: () => api.get<FacultyProfile>("/faculty/profile"),
   });
 
-  if (dashQuery.isLoading) return <PageSkeleton rows={4} />;
-  if (dashQuery.isError) {
-    return <PageError message="Could not load your profile." onRetry={() => void dashQuery.refetch()} />;
+  const updateMutation = useMutation({
+    mutationFn: (payload: { name: string; phone?: string }) =>
+      api.patch<FacultyProfile>("/faculty/profile", payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["faculty-profile"] });
+      toast.success("Profile updated");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update profile"),
+  });
+
+  if (profileQuery.isLoading) return <PageSkeleton rows={4} />;
+  if (profileQuery.isError) {
+    return <PageError message="Could not load your profile." onRetry={() => void profileQuery.refetch()} />;
   }
 
-  const me: AuthUser | null = dashQuery.data!.user ?? user;
-  const bus = dashQuery.data!.myBus;
-  const route = dashQuery.data!.route;
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus;
+  const route = bus?.route;
+  const routeStops = route?.stops
+    ?.sort((a, b) => a.stopOrder - b.stopOrder) ?? [];
 
-  const handleSave = async () => {
+  if (!initialized) {
+    setName(profile.name);
+    setPhone(profile.phone ?? "");
+    setInitialized(true);
+  }
+
+  const handleSave = () => {
     if (!name.trim()) {
       toast.error("Name cannot be empty");
       return;
     }
-    setSaving(true);
-    try {
-      await api.put<{ user: AuthUser }>("/auth/profile", { name: name.trim(), phone: phone.trim() || null });
-      await refresh();
-      toast.success("Profile updated");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not update profile");
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate({
+      name: name.trim(),
+      phone: phone.trim() || undefined,
+    });
   };
 
   const details: { label: string; value: string; icon: typeof UserRound }[] = [
-    { label: "Faculty ID", value: me?.id ?? "—", icon: BadgeCheck },
-    { label: "Department", value: me?.department ?? "—", icon: UserRound },
-    { label: "Email", value: me?.email ?? "—", icon: Mail },
-    { label: "Phone", value: me?.phone ?? "—", icon: Phone },
+    { label: "Faculty ID", value: profile.facultyId ?? "—", icon: BadgeCheck },
+    { label: "Department", value: profile.department ?? "—", icon: UserRound },
+    { label: "Email", value: profile.email ?? "—", icon: Mail },
+    { label: "Phone", value: profile.phone ?? "—", icon: Phone },
     {
       label: "Assigned bus",
-      value: bus ? `Route ${bus.routeNumber} · ${bus.vehicleNumber}` : "—",
+      value: bus ? `Route ${bus.busNumber} · ${bus.registrationNumber}` : "—",
       icon: Bus,
     },
-    { label: "Assigned route", value: route ? `Route ${route.routeNumber}` : "—", icon: RouteIcon },
+    { label: "Assigned route", value: route ? `Route ${route.routeCode}` : "—", icon: RouteIcon },
   ];
 
   return (
@@ -73,14 +87,13 @@ export default function FacultyProfilePage() {
         <Card className="shadow-card">
           <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
             <Avatar className="h-20 w-20 border-2 border-[#FFD700]/60 shadow-md">
-              {me?.photoUrl ? <AvatarImage src={me.photoUrl} alt={me.name} /> : null}
               <AvatarFallback className="bg-[#1a237e] text-xl font-extrabold text-white">
-                {me ? initials(me.name) : "?"}
+                {initials(profile.name)}
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="text-lg font-extrabold text-foreground">{me?.name}</p>
-              <p className="text-xs font-semibold text-muted-foreground">{me?.email}</p>
+              <p className="text-lg font-extrabold text-foreground">{profile.name}</p>
+              <p className="text-xs font-semibold text-muted-foreground">{profile.email}</p>
             </div>
             <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
               Faculty / Teacher
@@ -88,11 +101,13 @@ export default function FacultyProfilePage() {
             <div className="mt-2 flex w-full flex-col items-center gap-1.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Bus className="h-3.5 w-3.5 text-[#1a237e]" />
-                {bus ? `Route ${bus.routeNumber} · ${bus.vehicleNumber}` : "No bus assigned"}
+                {bus ? `Route ${bus.busNumber} · ${bus.registrationNumber}` : "No bus assigned"}
               </span>
               <span className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-[#1a237e]" />
-                {route ? `${route.stops[0]?.name} → College` : "No route assigned"}
+                {routeStops.length > 0
+                  ? `${routeStops[0].busStop.name} → ${routeStops[routeStops.length - 1].busStop.name}`
+                  : "No route assigned"}
               </span>
             </div>
           </CardContent>
@@ -120,9 +135,9 @@ export default function FacultyProfilePage() {
                 <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 …" />
               </div>
             </div>
-            <Button size="sm" className="gap-2 bg-[#1a237e] text-white hover:bg-[#283593]" onClick={handleSave} disabled={saving}>
+            <Button size="sm" className="gap-2 bg-[#1a237e] text-white hover:bg-[#283593]" onClick={handleSave} disabled={updateMutation.isPending}>
               <Save className="h-4 w-4" />
-              {saving ? "Saving…" : "Save changes"}
+              {updateMutation.isPending ? "Saving…" : "Save changes"}
             </Button>
             <p className="text-[11px] text-muted-foreground">
               Changes are saved to the transport server through your authenticated account. Bus, route and

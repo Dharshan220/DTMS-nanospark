@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -18,24 +19,13 @@ import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataSt
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatDateTime } from "@/lib/faculty";
-import type { Complaint } from "@/types/faculty";
 
-interface ReportSummary {
-  totals: { students: number; teachers: number; parents: number; complaints: number; feedback: number };
-  complaintsByStatus: { pending: number; in_progress: number; resolved: number };
-  complaintsByCategory: Record<string, number>;
-  attendanceRate: number;
-}
-
-interface FeedbackItem {
-  id: string;
-  name: string;
-  routeNumber: number | null;
-  rating: number;
-  message: string;
-  createdAt: number;
-}
+import type {
+  AnalyticsDashboard,
+  ComplaintAnalytics,
+  FeedbackAnalytics,
+  DailyAttendance,
+} from "@/types/faculty";
 
 function downloadCsv(filename: string, header: string[], rows: string[][]) {
   const csv = [header, ...rows]
@@ -51,69 +41,93 @@ function downloadCsv(filename: string, header: string[], rows: string[][]) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "#f59e0b",
-  in_progress: "#2563eb",
+  open: "#f59e0b",
+  in_review: "#2563eb",
   resolved: "#16a34a",
+  rejected: "#6b7280",
 };
 
 export default function AdminReportsPage() {
-  const summaryQuery = useQuery({
-    queryKey: ["admin-report-summary"],
-    queryFn: () => api.get<ReportSummary>("/reports/summary"),
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const dateParams = { from: dateFrom, to: dateTo };
+
+  const dashboardQuery = useQuery({
+    queryKey: ["admin-analytics-dashboard"],
+    queryFn: () => api.get<AnalyticsDashboard>("/admin/analytics/dashboard"),
   });
   const complaintsQuery = useQuery({
-    queryKey: ["admin-report-complaints"],
-    queryFn: () => api.get<{ items: Complaint[]; total: number }>("/reports/complaints"),
+    queryKey: ["admin-analytics-complaints", dateFrom, dateTo],
+    queryFn: () => api.get<ComplaintAnalytics>("/admin/analytics/complaints", { params: dateParams }),
+  });
+  const complaintsDailyQuery = useQuery({
+    queryKey: ["admin-analytics-complaints-daily", dateFrom, dateTo],
+    queryFn: () => api.get<{ date: string; total: number; resolved: number; open: number }[]>("/admin/analytics/complaints/daily", { params: dateParams }),
   });
   const feedbackQuery = useQuery({
-    queryKey: ["admin-report-feedback"],
-    queryFn: () => api.get<{ items: FeedbackItem[]; total: number }>("/reports/feedback"),
+    queryKey: ["admin-analytics-feedback", dateFrom, dateTo],
+    queryFn: () => api.get<FeedbackAnalytics>("/admin/analytics/feedback", { params: dateParams }),
   });
-  const attendanceQuery = useQuery({
-    queryKey: ["admin-report-attendance"],
-    queryFn: () => api.get<{ byDay: Record<string, { present: number; absent: number }>; total: number }>("/reports/attendance"),
+  const attendanceDailyQuery = useQuery({
+    queryKey: ["admin-analytics-attendance-daily", dateFrom, dateTo],
+    queryFn: () => api.get<DailyAttendance[]>("/admin/analytics/attendance/daily", { params: dateParams }),
+  });
+  const attendanceSummaryQuery = useQuery({
+    queryKey: ["admin-analytics-attendance-summary", dateFrom, dateTo],
+    queryFn: () => api.get<{ dateRange: { from: string; to: string }; totalRecords: number; totalPassengers: number; totalBoys: number; totalGirls: number; averagePassengers: number | null }>("/admin/analytics/attendance", { params: dateParams }),
   });
 
-  if (summaryQuery.isLoading || complaintsQuery.isLoading || feedbackQuery.isLoading || attendanceQuery.isLoading) {
-    return <PageSkeleton rows={6} />;
-  }
-  if (
-    summaryQuery.isError || complaintsQuery.isError || feedbackQuery.isError || attendanceQuery.isError
-  ) {
+  const isLoading = dashboardQuery.isLoading || complaintsQuery.isLoading || complaintsDailyQuery.isLoading || feedbackQuery.isLoading || attendanceDailyQuery.isLoading || attendanceSummaryQuery.isLoading;
+  const isError = dashboardQuery.isError || complaintsQuery.isError || complaintsDailyQuery.isError || feedbackQuery.isError || attendanceDailyQuery.isError || attendanceSummaryQuery.isError;
+
+  if (isLoading) return <PageSkeleton rows={6} />;
+  if (isError) {
     return (
       <PageError
         message="Could not load reports."
         onRetry={() => {
-          void summaryQuery.refetch();
+          void dashboardQuery.refetch();
           void complaintsQuery.refetch();
+          void complaintsDailyQuery.refetch();
           void feedbackQuery.refetch();
-          void attendanceQuery.refetch();
+          void attendanceDailyQuery.refetch();
+          void attendanceSummaryQuery.refetch();
         }}
       />
     );
   }
 
-  const summary = summaryQuery.data!;
-  const complaints = complaintsQuery.data!.items;
-  const feedback = feedbackQuery.data!.items;
-  const byDay = attendanceQuery.data!.byDay;
+  const dashboard = dashboardQuery.data!;
+  const complaints = complaintsQuery.data!;
+  const complaintsDaily = complaintsDailyQuery.data!;
+  const feedback = feedbackQuery.data!;
+  const dailyAttendance = attendanceDailyQuery.data!;
+  const attendanceSummary = attendanceSummaryQuery.data!;
 
-  const categoryData = Object.entries(summary.complaintsByCategory).map(([name, count]) => ({
-    name,
-    count,
-  }));
+  const categoryData = complaints.byCategory.map((c) => ({ name: c.category, count: c.count }));
   const statusData = [
-    { name: "Pending", value: summary.complaintsByStatus.pending, color: STATUS_COLORS.pending },
-    { name: "In Progress", value: summary.complaintsByStatus.in_progress, color: STATUS_COLORS.in_progress },
-    { name: "Resolved", value: summary.complaintsByStatus.resolved, color: STATUS_COLORS.resolved },
+    { name: "Open", value: complaints.open, color: STATUS_COLORS.open },
+    { name: "In Review", value: complaints.inReview, color: STATUS_COLORS.in_review },
+    { name: "Resolved", value: complaints.resolved, color: STATUS_COLORS.resolved },
+    { name: "Rejected", value: complaints.rejected, color: STATUS_COLORS.rejected },
   ].filter((d) => d.value > 0);
-  const dayData = Object.entries(byDay)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-14)
-    .map(([date, v]) => ({ date: date.slice(5), present: v.present, absent: v.absent }));
-  const avgRating = feedback.length
-    ? (feedback.reduce((s, f) => s + f.rating, 0) / feedback.length).toFixed(1)
-    : "—";
+
+  const dayData = dailyAttendance.slice(-14).map((d) => ({
+    date: d.date.slice(5),
+    boys: d.boys,
+    girls: d.girls,
+    total: d.total,
+  }));
+
+  const totalStudents = dashboard.users.students;
+  const totalComplaints = complaints.total;
+  const totalFeedback = feedback.total;
+  const avgRating = feedback.averageRating != null ? feedback.averageRating.toFixed(1) : "—";
 
   return (
     <>
@@ -121,29 +135,34 @@ export default function AdminReportsPage() {
         title="Analytics & Reports"
         description="Campus-wide transport insights — complaints, feedback and attendance trends."
         actions={
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() =>
-              downloadCsv(
-                `complaints-${Date.now()}.csv`,
-                ["Date", "Student", "Category", "Route", "Status", "Description"],
-                complaints.map((c) => [formatDateTime(c.createdAt), c.name, c.category, String(c.routeNumber ?? ""), c.status, c.description])
-              )
-            }
-          >
-            <Download className="h-4 w-4" /> Export Complaints
-          </Button>
+          <div className="flex items-center gap-2">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1 text-xs" />
+            <span className="text-xs text-muted-foreground">to</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-md border border-input bg-background px-2 py-1 text-xs" />
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() =>
+                downloadCsv(
+                  `complaints-${Date.now()}.csv`,
+                  ["Date Range", "Total", "Open", "In Review", "Resolved", "Rejected"],
+                  [[`${dateFrom} to ${dateTo}`, String(complaints.total), String(complaints.open), String(complaints.inReview), String(complaints.resolved), String(complaints.rejected)]]
+                )
+              }
+            >
+              <Download className="h-4 w-4" /> Export Complaints
+            </Button>
+          </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Students</p><p className="text-2xl font-extrabold text-[#1a237e]">{summary.totals.students}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Faculty</p><p className="text-2xl font-extrabold text-[#1a237e]">{summary.totals.teachers}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Parents</p><p className="text-2xl font-extrabold text-[#1a237e]">{summary.totals.parents}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Complaints</p><p className="text-2xl font-extrabold text-amber-600">{summary.totals.complaints}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Feedback</p><p className="text-2xl font-extrabold text-[#FFD700]">{summary.totals.feedback}</p></CardContent></Card>
-        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Attendance rate</p><p className="text-2xl font-extrabold text-green-600">{summary.attendanceRate}%</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Students</p><p className="text-2xl font-extrabold text-[#1a237e]">{totalStudents}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Faculty</p><p className="text-2xl font-extrabold text-[#1a237e]">{dashboard.users.faculty}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Active Buses</p><p className="text-2xl font-extrabold text-[#1a237e]">{dashboard.transport.activeBuses}/{dashboard.transport.buses}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Complaints</p><p className="text-2xl font-extrabold text-amber-600">{totalComplaints}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Feedback</p><p className="text-2xl font-extrabold text-[#FFD700]">{totalFeedback}</p></CardContent></Card>
+        <Card className="shadow-card"><CardContent className="pt-6"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Attendance Avg</p><p className="text-2xl font-extrabold text-green-600">{attendanceSummary.averagePassengers ?? "—"}</p></CardContent></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -212,29 +231,33 @@ export default function AdminReportsPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
               <Star className="h-4 w-4 text-[#FFD700]" />
-              Feedback ({feedback.length})
+              Feedback ({totalFeedback})
             </CardTitle>
             <Badge variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
               Avg rating {avgRating}/5
             </Badge>
           </CardHeader>
           <CardContent>
-            {feedback.length === 0 ? (
+            {feedback.byCategory.length === 0 && !feedback.averageRating ? (
               <EmptyState message="No feedback submitted yet." />
             ) : (
-              <ul className="max-h-72 divide-y divide-border overflow-y-auto pr-1">
-                {feedback.map((f) => (
-                  <li key={f.id} className="flex flex-col gap-1 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-foreground">{f.name}</span>
-                      <span className="text-xs text-amber-500">{"★".repeat(f.rating)}</span>
-                      {f.routeNumber ? <span className="text-[11px] text-muted-foreground">Route {f.routeNumber}</span> : null}
-                      <span className="ml-auto text-[11px] text-muted-foreground">{formatDate(f.createdAt)}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{f.message}</p>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs">Submitted: {feedback.submitted}</Badge>
+                  <Badge variant="outline" className="text-xs">Reviewed: {feedback.reviewed}</Badge>
+                  <Badge variant="outline" className="text-xs">Resolved: {feedback.resolved}</Badge>
+                </div>
+                {feedback.byCategory.length > 0 && (
+                  <ul className="max-h-56 divide-y divide-border overflow-y-auto pr-1">
+                    {feedback.byCategory.map((c) => (
+                      <li key={c.category} className="flex items-center justify-between py-2">
+                        <span className="text-xs font-bold text-foreground">{c.category}</span>
+                        <span className="text-xs text-muted-foreground">{c.count} feedback</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -252,10 +275,8 @@ export default function AdminReportsPage() {
               onClick={() =>
                 downloadCsv(
                   `attendance-${Date.now()}.csv`,
-                  ["Date", "Present", "Absent"],
-                  Object.entries(byDay)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([date, v]) => [date, String(v.present), String(v.absent)])
+                  ["Date", "Boys", "Girls", "Total"],
+                  dailyAttendance.map((d) => [d.date, String(d.boys), String(d.girls), String(d.total)])
                 )
               }
             >
@@ -273,8 +294,8 @@ export default function AdminReportsPage() {
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <Tooltip cursor={{ fill: "rgba(26,35,126,0.06)" }} contentStyle={{ fontSize: 12, borderRadius: 12 }} />
-                    <Bar dataKey="present" name="Present" stackId="a" fill="#16a34a" radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="absent" name="Absent" stackId="a" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="boys" name="Boys" stackId="a" fill="#2563eb" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="girls" name="Girls" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

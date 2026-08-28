@@ -37,36 +37,39 @@ import {
   EMERGENCY_STATUS_LABELS,
   type EmergencyReport,
   type EmergencyType,
-  type TrackingResponse,
+  type FacultyProfile,
+  type Paginated,
 } from "@/types/faculty";
 
 const TRANSPORT_OFFICE_PHONE = "9962022222";
 
 export default function FacultyEmergencyPage() {
   const { user } = useAuth();
-  const [type, setType] = useState<EmergencyType>("breakdown");
+  const [type, setType] = useState<EmergencyType>("BREAKDOWN");
   const [description, setDescription] = useState("");
   const queryClient = useQueryClient();
 
-  const dashQuery = useQuery({
-    queryKey: ["faculty-dashboard"],
-    queryFn: () => api.get<{ myBus: { id: string; routeNumber: number; vehicleNumber: string } | null }>("/dashboard"),
+  const profileQuery = useQuery({
+    queryKey: ["faculty-profile"],
+    queryFn: () => api.get<FacultyProfile>("/faculty/profile"),
   });
-  const trackingQuery = useQuery({
-    queryKey: ["faculty-tracking"],
-    queryFn: () => api.get<TrackingResponse>("/tracking/my"),
-    refetchInterval: 15000,
+
+  const activeQuery = useQuery({
+    queryKey: ["faculty-emergency-active"],
+    queryFn: () => api.get<{ active: boolean; alert: EmergencyReport | null }>("/emergency/active"),
   });
-  const reportsQuery = useQuery({
-    queryKey: ["faculty-emergencies"],
-    queryFn: () => api.get<{ items: EmergencyReport[]; total: number }>("/emergencies"),
+
+  const historyQuery = useQuery({
+    queryKey: ["faculty-emergency-history"],
+    queryFn: () => api.get<Paginated<EmergencyReport>>("/emergency?page=1&limit=20"),
   });
 
   const reportMutation = useMutation({
-    mutationFn: (payload: { type: EmergencyType; description: string; location: string; busId: string | null; routeNumber: number | null }) =>
-      api.post<{ emergency: EmergencyReport }>("/emergencies", payload),
+    mutationFn: (payload: { type?: EmergencyType; message?: string; latitude?: number; longitude?: number }) =>
+      api.post<EmergencyReport>("/emergency", payload),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["faculty-emergencies"] });
+      void queryClient.invalidateQueries({ queryKey: ["faculty-emergency-active"] });
+      void queryClient.invalidateQueries({ queryKey: ["faculty-emergency-history"] });
       setDescription("");
       toast.success("SOS report sent to the transport department", {
         description: "The department has been alerted and will respond to this report.",
@@ -76,32 +79,36 @@ export default function FacultyEmergencyPage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not send the SOS report"),
   });
 
-  if (dashQuery.isLoading || trackingQuery.isLoading || reportsQuery.isLoading) return <PageSkeleton rows={4} />;
-  if (dashQuery.isError || trackingQuery.isError || reportsQuery.isError) {
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api.patch<EmergencyReport>(`/emergency/${id}/cancel`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["faculty-emergency-active"] });
+      void queryClient.invalidateQueries({ queryKey: ["faculty-emergency-history"] });
+      toast.success("Emergency report cancelled");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not cancel the report"),
+  });
+
+  if (profileQuery.isLoading || activeQuery.isLoading || historyQuery.isLoading) return <PageSkeleton rows={4} />;
+  if (profileQuery.isError || activeQuery.isError || historyQuery.isError) {
     return (
       <PageError
         message="Could not prepare the emergency panel."
-        onRetry={() => { void dashQuery.refetch(); void trackingQuery.refetch(); void reportsQuery.refetch(); }}
+        onRetry={() => { void profileQuery.refetch(); void activeQuery.refetch(); void historyQuery.refetch(); }}
       />
     );
   }
 
-  const bus = dashQuery.data!.myBus;
-  const current = trackingQuery.data!.current;
-  const locationLabel = `Route ${bus?.routeNumber ?? "—"} near ${current.nextStop} (${current.lat.toFixed(4)}, ${current.lng.toFixed(4)})`;
-  const history = reportsQuery.data!.items;
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus;
+  const activeEmergency = activeQuery.data;
+  const history = historyQuery.data?.data ?? [];
 
   const handleSos = () => {
-    if (description.trim().length < 5) {
-      toast.error("Please describe the emergency briefly.");
-      return;
-    }
     reportMutation.mutate({
       type,
-      description: description.trim(),
-      location: locationLabel,
-      busId: bus?.id ?? null,
-      routeNumber: bus?.routeNumber ?? null,
+      message: description.trim() || undefined,
     });
   };
 
@@ -121,6 +128,27 @@ export default function FacultyEmergencyPage() {
         </AlertDescription>
       </Alert>
 
+      {activeEmergency?.active && activeEmergency.alert && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-800">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Active Emergency</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              You have an active {EMERGENCY_TYPE_LABELS[activeEmergency.alert.type]} report.
+              Status: {EMERGENCY_STATUS_LABELS[activeEmergency.alert.status]}.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => cancelMutation.mutate(activeEmergency.alert!.id)}
+              disabled={cancelMutation.isPending}
+            >
+              Cancel Report
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="border-red-200 bg-gradient-to-br from-red-50 to-white shadow-card lg:col-span-1">
           <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
@@ -133,7 +161,7 @@ export default function FacultyEmergencyPage() {
             <div>
               <p className="text-lg font-extrabold text-red-700">SOS — Alert Transport</p>
               <p className="text-xs text-muted-foreground">
-                {bus ? `Route ${bus.routeNumber} · ${bus.vehicleNumber}` : "No bus assigned"}
+                {bus ? `Route ${bus.busNumber} · ${bus.registrationNumber}` : "No bus assigned"}
               </p>
             </div>
             <a
@@ -175,7 +203,7 @@ export default function FacultyEmergencyPage() {
                   Reporting faculty
                 </Label>
                 <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm font-bold text-foreground">
-                  {user?.name ?? "—"}
+                  {profile.name ?? "—"}
                 </div>
               </div>
             </div>
@@ -184,16 +212,7 @@ export default function FacultyEmergencyPage() {
                 Bus
               </Label>
               <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm font-bold text-foreground">
-                {bus ? `Route ${bus.routeNumber} · ${bus.vehicleNumber}` : "—"}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Current location <span className="font-normal normal-case text-muted-foreground/70">(from live tracking)</span>
-              </Label>
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm font-semibold text-foreground">
-                <MapPin className="h-4 w-4 shrink-0 text-[#1a237e]" />
-                {locationLabel}
+                {bus ? `Route ${bus.busNumber} · ${bus.registrationNumber}` : "—"}
               </div>
             </div>
             <div className="space-y-1.5">
@@ -218,7 +237,7 @@ export default function FacultyEmergencyPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm SOS report</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This sends a {EMERGENCY_TYPE_LABELS[type]} report for Route {bus?.routeNumber ?? "—"} to the
+                    This sends a {EMERGENCY_TYPE_LABELS[type]} report for Route {bus?.busNumber ?? "—"} to the
                     transport department. For real emergencies, also call the transport office immediately.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -253,14 +272,14 @@ export default function FacultyEmergencyPage() {
                 <li key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-xs font-bold text-foreground">
-                      {r.busNumber ?? "Bus —"}
+                      {r.bus?.registrationNumber ?? "Bus —"}
                       <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
                         {EMERGENCY_TYPE_LABELS[r.type]}
                       </Badge>
                       <Badge
                         variant="outline"
                         className={
-                          r.status === "resolved"
+                          r.status === "RESOLVED"
                             ? "border-green-200 bg-green-50 text-green-700"
                             : "border-amber-200 bg-amber-50 text-amber-700"
                         }
@@ -268,10 +287,10 @@ export default function FacultyEmergencyPage() {
                         {EMERGENCY_STATUS_LABELS[r.status]}
                       </Badge>
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{r.description}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground/80">
-                      {r.reportedByName} · {r.location}
-                      {r.adminResponse ? ` · Response: ${r.adminResponse}` : ""}
+                      {r.faculty?.name ?? "Faculty"} · {r.latitude && r.longitude ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : "Location unknown"}
+                      {r.resolutionNote ? ` · Response: ${r.resolutionNote}` : ""}
                     </p>
                   </div>
                   <span className="shrink-0 text-[11px] font-semibold text-muted-foreground">

@@ -12,80 +12,93 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { formatDate, formatDateTime } from "@/lib/faculty";
+import { formatDate } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import StatCard from "@/components/faculty/StatCard";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import type { AnalyticsDashboard, EmergencyReport, BusInfo, Complaint, Feedback } from "@/types/faculty";
+import { EMERGENCY_STATUS_LABELS } from "@/types/faculty";
 import {
-  EMERGENCY_TYPE_LABELS,
-  type AdminDashboardResponse,
-} from "@/types/faculty";
-import {
-  AdminBusStatusBadge,
   EmergencyStatusBadge,
   EmergencyTypeBadge,
 } from "@/components/admin/AdminBadges";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
-  const query = useQuery({
-    queryKey: ["admin-dashboard"],
-    queryFn: () => api.get<AdminDashboardResponse>("/dashboard"),
+  const dashboardQuery = useQuery({
+    queryKey: ["admin-analytics-dashboard"],
+    queryFn: () => api.get<AnalyticsDashboard>("/admin/analytics/dashboard"),
     refetchInterval: 30000,
   });
+  const emergenciesQuery = useQuery({
+    queryKey: ["admin-emergencies-active"],
+    queryFn: () => api.get<{ data: EmergencyReport[]; pagination: { total: number } }>("/admin/emergency?page=1&limit=10"),
+    refetchInterval: 20000,
+  });
+  const complaintsQuery = useQuery({
+    queryKey: ["admin-complaints-recent"],
+    queryFn: () => api.get<{ data: Complaint[]; pagination: { total: number } }>("/admin/complaints?page=1&limit=5"),
+  });
+  const feedbackQuery = useQuery({
+    queryKey: ["admin-feedback-recent"],
+    queryFn: () => api.get<{ data: Feedback[]; pagination: { total: number } }>("/admin/feedback?page=1&limit=5"),
+  });
 
-  if (query.isLoading) return <PageSkeleton rows={6} />;
-  if (query.isError) {
-    return <PageError message="Could not load the admin dashboard." onRetry={() => void query.refetch()} />;
+  if (dashboardQuery.isLoading) return <PageSkeleton rows={6} />;
+  if (dashboardQuery.isError) {
+    return <PageError message="Could not load the admin dashboard." onRetry={() => void dashboardQuery.refetch()} />;
   }
-  const d = query.data!;
+  const d = dashboardQuery.data!;
+  const emergencies = emergenciesQuery.data?.data ?? [];
+  const activeEmergencies = emergencies.filter((e) => e.status === "ACTIVE");
+  const complaints = complaintsQuery.data?.data ?? [];
+  const feedback = feedbackQuery.data?.data ?? [];
 
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${d.adminName}`}
+        title={`Welcome back, ${user?.email ?? "Admin"}`}
         description="Overview of the entire transport operation — buses, people, safety and attendance."
       />
 
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-        <StatCard label="Students" value={d.stats.totalStudents} icon={Users} tone="navy" />
-        <StatCard label="Faculty" value={d.stats.totalTeachers} icon={Users} tone="navy" />
-        <StatCard label="Parents" value={d.stats.totalParents} icon={Users} tone="navy" />
-        <StatCard label="Buses in Fleet" value={d.stats.totalBuses} icon={Bus} tone="navy" />
+        <StatCard label="Students" value={d.users.students} icon={Users} tone="navy" />
+        <StatCard label="Faculty" value={d.users.faculty} icon={Users} tone="navy" />
+        <StatCard label="Buses in Fleet" value={d.transport.buses} icon={Bus} tone="navy" />
         <StatCard
           label="Active Buses"
-          value={d.stats.activeBuses}
+          value={d.transport.activeBuses}
           icon={Bus}
           tone="success"
-          sub={`${d.stats.maintenanceBuses} maintenance · ${d.stats.inactiveBuses} inactive`}
+          sub={`${d.transport.routes} routes`}
         />
-        <StatCard label="Drivers" value={d.stats.totalDrivers} icon={Truck} tone="gold" />
-        <StatCard label="Trips Today" value={d.stats.activeTrips} icon={ClipboardCheck} tone="success" />
-        <StatCard label="Present Today" value={d.stats.todayPresent} icon={Users} tone="navy" />
+        <StatCard label="Active Routes" value={d.transport.routes} icon={Truck} tone="gold" />
+        <StatCard label="Student Assignments" value={d.transport.activeStudentAssignments} icon={ClipboardCheck} tone="success" />
+        <StatCard label="Faculty Assignments" value={d.transport.activeFacultyAssignments} icon={ClipboardCheck} tone="success" />
+        <StatCard label="Present Today" value={d.attendance.today.present} icon={Users} tone="navy" />
         <StatCard
           label="Passengers Today"
-          value={d.todayPassenger.total}
+          value={d.attendance.today.boys + d.attendance.today.girls}
           icon={ClipboardCheck}
           tone="success"
-          sub={`${d.todayPassenger.boys} boys · ${d.todayPassenger.girls} girls · ${d.todayPassenger.morning} morning · ${d.todayPassenger.evening} evening`}
+          sub={`${d.attendance.today.boys} boys · ${d.attendance.today.girls} girls`}
         />
         <StatCard
           label="Open Complaints"
-          value={d.stats.pendingComplaints + d.stats.inProgressComplaints + d.stats.escalatedComplaints}
+          value={d.operations.openComplaints}
           icon={MessageSquareWarning}
           tone="warning"
-          sub={`${d.stats.resolvedComplaints} resolved of ${d.stats.complaints}`}
         />
-        <StatCard label="Feedback" value={d.stats.feedback} icon={MessageSquareWarning} tone="navy" />
+        <StatCard label="Pending Feedback" value={d.operations.pendingFeedback} icon={MessageSquareWarning} tone="navy" />
         <StatCard
           label="Active Emergencies"
-          value={d.stats.activeEmergencies}
+          value={d.operations.activeEmergencies}
           icon={Siren}
-          tone={d.stats.activeEmergencies > 0 ? "danger" : "success"}
+          tone={d.operations.activeEmergencies > 0 ? "danger" : "success"}
         />
-        <StatCard label="Maintenance Records" value={d.stats.maintenanceRecords} icon={Wrench} tone="gold" />
+        <StatCard label="Active Schedules" value={d.schedules.active} icon={ClipboardCheck} tone="navy" />
+        <StatCard label="Notifications" value={d.notifications.total} icon={MessageSquareWarning} tone="gold" sub={`${d.notifications.failed} failed`} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -97,21 +110,24 @@ export default function AdminDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {d.activeEmergencies.length === 0 ? (
+            {activeEmergencies.length === 0 ? (
               <EmptyState message="No active emergencies. All clear." />
             ) : (
               <ul className="divide-y divide-border">
-                {d.activeEmergencies.map((e) => (
+                {activeEmergencies.slice(0, 5).map((e) => (
                   <li key={e.id} className="flex flex-col gap-1 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-foreground">{e.busNumber ?? "Bus —"}</span>
+                      <span className="text-xs font-bold text-foreground">
+                        {e.bus ? `Bus ${e.bus.busNumber}` : "No bus"}
+                      </span>
                       <EmergencyTypeBadge type={e.type} />
                       <EmergencyStatusBadge status={e.status} />
                     </div>
-                    <p className="text-xs text-muted-foreground">{e.description}</p>
+                    <p className="text-xs text-muted-foreground">{e.message}</p>
                     <p className="text-[11px] text-muted-foreground/80">
-                      {e.reportedByName} · {e.location ?? "Location not shared"} ·{" "}
-                      {formatDateTime(e.createdAt)}
+                      {e.student?.name ?? e.faculty?.name ?? "Unknown"} ·{" "}
+                      {e.latitude != null ? `${e.latitude.toFixed(4)}, ${e.longitude?.toFixed(4)}` : "Location not shared"} ·{" "}
+                      {formatDate(e.createdAt)}
                     </p>
                   </li>
                 ))}
@@ -129,75 +145,33 @@ export default function AdminDashboardPage() {
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
-              <Bus className="h-4 w-4 text-[#1a237e]" />
-              Bus Fleet Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.buses.length === 0 ? (
-              <EmptyState message="No buses in the fleet yet." />
-            ) : (
-              <ul className="divide-y divide-border">
-                {d.buses.slice(0, 8).map((b) => (
-                  <li key={b.id} className="flex items-center justify-between gap-2 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-foreground">
-                        Route {b.routeNumber} · {b.vehicleNumber}
-                      </p>
-                      <p className="truncate text-[11px] text-muted-foreground">
-                        {b.driverName ?? "No driver assigned"} · {b.busAdminCount} faculty
-                      </p>
-                    </div>
-                    <AdminBusStatusBadge status={b.status} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Link
-              to="/admin/buses"
-              className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#1a237e] hover:underline"
-            >
-              Manage buses <ArrowRight className="h-3 w-3" />
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
               <MessageSquareWarning className="h-4 w-4 text-[#1a237e]" />
               Recent Complaints
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {d.recentComplaints.length === 0 ? (
+            {complaints.length === 0 ? (
               <EmptyState message="No complaints submitted yet." />
             ) : (
               <ul className="divide-y divide-border">
-                {d.recentComplaints.map((c) => (
+                {complaints.map((c) => (
                   <li key={c.id} className="flex flex-col gap-1 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
-                        {c.category}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={
-                          c.status === "resolved"
-                            ? "border-green-200 bg-green-50 text-green-700"
-                            : c.status === "in_progress"
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : c.status === "escalated"
-                                ? "border-red-200 bg-red-50 text-red-700"
-                                : "border-amber-200 bg-amber-50 text-amber-700"
-                        }
+                      <span className="text-xs font-bold text-foreground">{c.subject}</span>
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          c.status === "RESOLVED"
+                            ? "border border-green-200 bg-green-50 text-green-700"
+                            : c.status === "IN_REVIEW"
+                              ? "border border-blue-200 bg-blue-50 text-blue-700"
+                              : "border border-amber-200 bg-amber-50 text-amber-700"
+                        }`}
                       >
                         {c.status.replace("_", " ")}
-                      </Badge>
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {c.name}
-                      {c.routeNumber ? ` · Route ${c.routeNumber}` : ""} · {formatDate(c.createdAt)}
+                      {c.category} · {formatDate(c.createdAt)}
                     </p>
                   </li>
                 ))}
@@ -220,18 +194,15 @@ export default function AdminDashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {d.recentFeedback.length === 0 ? (
+            {feedback.length === 0 ? (
               <EmptyState message="No feedback submitted yet." />
             ) : (
               <ul className="divide-y divide-border">
-                {d.recentFeedback.map((f) => (
+                {feedback.map((f) => (
                   <li key={f.id} className="flex flex-col gap-1 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-foreground">{f.name}</span>
+                      <span className="text-xs font-bold text-foreground">{f.student?.name ?? "Student"}</span>
                       <span className="text-xs text-amber-500">{"★".repeat(f.rating)}</span>
-                      {f.routeNumber ? (
-                        <span className="text-[11px] text-muted-foreground">Route {f.routeNumber}</span>
-                      ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">{f.message}</p>
                     <p className="text-[11px] text-muted-foreground/80">{formatDate(f.createdAt)}</p>
@@ -250,7 +221,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <p className="text-center text-[11px] text-muted-foreground">
-        {user?.name} · {user?.email} · {formatDate(Date.now())}
+        {user?.email} · {formatDate(new Date().toISOString())}
       </p>
     </>
   );

@@ -13,54 +13,53 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
-import { formatDateTime, notificationCategory } from "@/lib/faculty";
+import { formatDateTime } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { NotificationItem, NotificationType } from "@/types/faculty";
+import type { NotificationItem, NotificationType, Paginated } from "@/types/faculty";
 
-const CATEGORY_TONE: Record<NotificationType, string> = {
-  "Bus Delay": "border-amber-200 bg-amber-50 text-amber-700",
-  "Route Change": "border-indigo-200 bg-indigo-50 text-indigo-700",
-  "Bus Replacement": "border-purple-200 bg-purple-50 text-purple-700",
-  Emergency: "border-red-200 bg-red-50 text-red-700",
-  "Complaint Update": "border-sky-200 bg-sky-50 text-sky-700",
-  "Transport Announcement": "border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]",
-  General: "border-slate-200 bg-slate-100 text-slate-600",
+const CATEGORY_TONE: Record<string, string> = {
+  EMERGENCY: "border-red-200 bg-red-50 text-red-700",
+  COMPLAINT: "border-sky-200 bg-sky-50 text-sky-700",
+  FEEDBACK: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  TRANSPORT: "border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]",
+  SYSTEM: "border-slate-200 bg-slate-100 text-slate-600",
 };
 
 export default function FacultyNotificationsPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"all" | NotificationType>("all");
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
   const notificationsQuery = useQuery({
-    queryKey: ["faculty-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryKey: ["faculty-notifications", page],
+    queryFn: () => api.get<Paginated<NotificationItem>>(`/notifications?page=${page}&limit=${limit}`),
   });
 
   const readMutation = useMutation({
-    mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["faculty-notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["faculty-dashboard"] });
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update notification"),
   });
 
   const readAllMutation = useMutation({
-    mutationFn: () => api.put("/notifications/read-all"),
+    mutationFn: () => api.post("/notifications/read-all"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["faculty-notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["faculty-dashboard"] });
       toast.success("All notifications marked as read");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update notifications"),
   });
 
-  const items = useMemo(() => notificationsQuery.data?.items ?? [], [notificationsQuery.data]);
-  const unread = notificationsQuery.data?.unread ?? 0;
+  const items = useMemo(() => notificationsQuery.data?.data ?? [], [notificationsQuery.data]);
+  const pagination = notificationsQuery.data?.pagination;
+  const unread = items.filter((n) => !n.readAt).length;
 
   const filtered = useMemo(
-    () => (filter === "all" ? items : items.filter((n) => notificationCategory(n) === filter)),
+    () => (filter === "all" ? items : items.filter((n) => n.type === filter)),
     [items, filter]
   );
 
@@ -98,13 +97,11 @@ export default function FacultyNotificationsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            <SelectItem value="Bus Delay">Bus Delay</SelectItem>
-            <SelectItem value="Route Change">Route Change</SelectItem>
-            <SelectItem value="Bus Replacement">Bus Replacement</SelectItem>
-            <SelectItem value="Emergency">Emergency</SelectItem>
-            <SelectItem value="Complaint Update">Complaint Update</SelectItem>
-            <SelectItem value="Transport Announcement">Transport Announcement</SelectItem>
-            <SelectItem value="General">General</SelectItem>
+            <SelectItem value="EMERGENCY">Emergency</SelectItem>
+            <SelectItem value="COMPLAINT">Complaint</SelectItem>
+            <SelectItem value="FEEDBACK">Feedback</SelectItem>
+            <SelectItem value="TRANSPORT">Transport</SelectItem>
+            <SelectItem value="SYSTEM">System</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -118,32 +115,32 @@ export default function FacultyNotificationsPage() {
       ) : (
         <div className="space-y-2.5">
           {filtered.map((n) => {
-            const cat = notificationCategory(n);
+            const cat = n.type;
             return (
               <Card
                 key={n.id}
-                className={`shadow-card transition ${n.read ? "opacity-75" : "border-l-4 border-l-[#caa200]"}`}
+                className={`shadow-card transition ${n.readAt ? "opacity-75" : "border-l-4 border-l-[#caa200]"}`}
               >
                 <CardContent className="flex items-start gap-3 p-4">
                   <span
-                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.read ? "bg-slate-300" : "bg-[#FFD700] ring-2 ring-[#caa200]/40"}`}
-                    title={n.read ? "Read" : "Unread"}
+                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.readAt ? "bg-slate-300" : "bg-[#FFD700] ring-2 ring-[#caa200]/40"}`}
+                    title={n.readAt ? "Read" : "Unread"}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className={`text-sm ${n.read ? "font-semibold" : "font-extrabold"} text-foreground`}>
+                      <p className={`text-sm ${n.readAt ? "font-semibold" : "font-extrabold"} text-foreground`}>
                         {n.title}
                       </p>
-                      <Badge variant="outline" className={`text-[10px] ${CATEGORY_TONE[cat]}`}>
+                      <Badge variant="outline" className={`text-[10px] ${CATEGORY_TONE[cat] ?? CATEGORY_TONE.SYSTEM}`}>
                         {cat}
                       </Badge>
                     </div>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{n.body}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{n.message}</p>
                     <p className="mt-1 text-[11px] font-semibold text-muted-foreground/80">
                       {formatDateTime(n.createdAt)}
                     </p>
                   </div>
-                  {!n.read ? (
+                  {!n.readAt ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -159,6 +156,30 @@ export default function FacultyNotificationsPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Previous
+          </Button>
+          <span className="text-xs font-semibold text-muted-foreground">
+            Page {page} of {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+            disabled={page === pagination.totalPages}
+          >
+            Next
+          </Button>
         </div>
       )}
 

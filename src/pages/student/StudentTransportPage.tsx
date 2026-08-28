@@ -3,73 +3,52 @@ import { Bus, CalendarClock, Clock, MapPin, Phone, Route as RouteIcon, UserRound
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import { deriveBusStatus, formatRelative, nowMinutes, timeToMinutes } from "@/lib/faculty";
-import { demoTripState } from "@/data/facultyDemo";
+import { formatRelative } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
-import { BusStatusBadge } from "@/components/faculty/Badges";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { DashboardResponse, TrackingResponse } from "@/types/faculty";
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import type { StudentProfile } from "@/types/faculty";
 
 export default function StudentTransportPage() {
-  const { user } = useAuth();
-
-  const dashQuery = useQuery({
-    queryKey: ["student-dashboard"],
-    queryFn: () => api.get<DashboardResponse>("/dashboard"),
+  const profileQuery = useQuery({
+    queryKey: ["student-profile"],
+    queryFn: () => api.get<StudentProfile>("/student/profile"),
   });
 
-  const trackingQuery = useQuery({
-    queryKey: ["student-tracking"],
-    queryFn: () => api.get<TrackingResponse>("/tracking/my"),
-    enabled: false,
-  });
-
-  if (dashQuery.isLoading) return <PageSkeleton />;
-  if (dashQuery.isError) {
+  if (profileQuery.isLoading) return <PageSkeleton />;
+  if (profileQuery.isError) {
     return (
       <PageError
         message="Could not load your transport details."
-        onRetry={() => void dashQuery.refetch()}
+        onRetry={() => void profileQuery.refetch()}
       />
     );
   }
 
-  const dash = dashQuery.data!;
-  const bus = dash.myBus;
-  const route = dash.route;
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus ?? null;
+  const busStop = transport?.busStop ?? null;
+  const route = bus?.route ?? null;
+  const stops = route?.stops ?? [];
+  const firstStop = stops[0];
+  const collegeStop = stops.find(
+    (s) => s.busStop.name.toUpperCase() === "COLLEGE"
+  );
 
   if (!bus || !route) {
     return (
       <PageError
         message="No bus or route is assigned to your profile yet."
-        onRetry={() => void dashQuery.refetch()}
+        onRetry={() => void profileQuery.refetch()}
       />
     );
   }
-
-  const trip = demoTripState(bus.routeNumber, today());
-  const status = deriveBusStatus(
-    bus,
-    route ? { boardingPoints: route.stops, arrivalTime: route.arrivalTime } : null,
-    trip.delayed
-  );
-
-  const firstStop = route.stops[0];
-  const collegeStop = route.stops.find((s) => s.name.toUpperCase() === "COLLEGE");
-  const arrivalMins = timeToMinutes(route.arrivalTime ?? "8:05 AM");
-  const now = nowMinutes();
 
   return (
     <>
       <PageHeader
         title="My Transport"
         description="Your assigned bus, route and daily stops."
-        actions={<BusStatusBadge status={status} />}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -77,7 +56,7 @@ export default function StudentTransportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
               <Bus className="h-4 w-4 text-[#1a237e]" />
-              My Bus — Route {bus.routeNumber}
+              My Bus — Route {bus.busNumber}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -86,26 +65,19 @@ export default function StudentTransportPage() {
                 <Bus className="h-8 w-8" />
               </div>
               <div>
-                <p className="text-2xl font-extrabold tracking-wide">{bus.vehicleNumber}</p>
+                <p className="text-2xl font-extrabold tracking-wide">{bus.registrationNumber}</p>
                 <p className="text-xs font-semibold text-white/70">
-                  Route {bus.routeNumber} · {bus.status === "maintenance" ? "In maintenance" : "In service"}
+                  Route {bus.busNumber} · {bus.status === "MAINTENANCE" ? "In maintenance" : "In service"}
                 </p>
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <InfoRow label="Driver" value={bus.driverName || "—"} icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} />
-              <InfoRow label="Driver contact" value={bus.driverPhone || "—"} icon={<Phone className="h-3.5 w-3.5 text-[#1a237e]" />} />
-              <InfoRow label="My boarding stop" value={user?.boardingStop || "—"} icon={<MapPin className="h-3.5 w-3.5 text-[#1a237e]" />} />
-              <InfoRow label="My roll number" value={user?.rollNo || "—"} icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} />
+              <InfoRow label="Driver" value={bus.driver?.name || "—"} icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} />
+              <InfoRow label="Driver contact" value={bus.driver?.phone || "—"} icon={<Phone className="h-3.5 w-3.5 text-[#1a237e]" />} />
+              <InfoRow label="My boarding stop" value={busStop?.name || "—"} icon={<MapPin className="h-3.5 w-3.5 text-[#1a237e]" />} />
+              <InfoRow label="Register number" value={profile.registerNumber || "—"} icon={<UserRound className="h-3.5 w-3.5 text-[#1a237e]" />} />
             </div>
-
-            {trip.delayed ? (
-              <p className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                Today's trip is delayed by traffic (demo data).
-              </p>
-            ) : null}
           </CardContent>
         </Card>
 
@@ -119,18 +91,28 @@ export default function StudentTransportPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 shrink-0 text-[#1a237e]" />
-              <span className="font-semibold text-foreground">{firstStop?.name ?? "—"}</span>
+              <span className="font-semibold text-foreground">
+                {firstStop?.busStop.name ?? "—"}
+              </span>
               <span className="text-muted-foreground">→</span>
-              <span className="font-semibold text-foreground">{collegeStop?.name ?? "College"}</span>
+              <span className="font-semibold text-foreground">
+                {collegeStop?.busStop.name ?? "College"}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoRow label="Departure" value={firstStop?.time ?? "—"} />
-              <InfoRow label="College arrival" value={route.arrivalTime ?? "—"} />
+              <InfoRow
+                label="Departure"
+                value={firstStop?.estimatedArrivalTime ?? "—"}
+              />
+              <InfoRow
+                label="College arrival"
+                value={collegeStop?.estimatedArrivalTime ?? "—"}
+              />
               <InfoRow
                 label="Current status"
-                value={now > arrivalMins + 45 ? "Trip completed" : "Trip scheduled"}
+                value="Trip scheduled"
               />
-              <InfoRow label="Stops on route" value={String(route.stops.length)} />
+              <InfoRow label="Stops on route" value={String(stops.length)} />
             </div>
           </CardContent>
         </Card>
@@ -140,34 +122,34 @@ export default function StudentTransportPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
             <RouteIcon className="h-4 w-4 text-[#1a237e]" />
-            Route {route.routeNumber} — Stops &amp; Timings
+            Route {route.routeCode} — Stops &amp; Timings
           </CardTitle>
           <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
             {formatRelative(Date.now())} · today
           </Badge>
         </CardHeader>
         <CardContent>
-          {route.stops.length === 0 ? (
+          {stops.length === 0 ? (
             <EmptyState message="No stops defined for this route yet." />
           ) : (
             <ol className="relative space-y-4 border-l-2 border-[#1a237e]/15 pl-6">
-              {route.stops.map((s, i) => {
-                const isCollege = s.name.toUpperCase() === "COLLEGE";
-                const isMine = s.name === user?.boardingStop;
+              {stops.map((s, i) => {
+                const isCollege = s.busStop.name.toUpperCase() === "COLLEGE";
+                const isMine = s.busStop.id === busStop?.id;
                 return (
-                  <li key={`${s.name}-${i}`} className="relative">
+                  <li key={`${s.busStop.id}-${i}`} className="relative">
                     <span
                       className={`absolute -left-[31px] top-1 flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-extrabold text-white ring-4 ring-background ${
                         isCollege ? "bg-[#FFD700] text-[#1a237e]" : isMine ? "bg-green-600" : "bg-[#1a237e]"
                       }`}
                     >
-                      {i + 1}
+                      {s.stopOrder}
                     </span>
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-secondary/30 px-3.5 py-2.5">
                       <div className="min-w-0">
                         <p className="flex items-center gap-1.5 text-sm font-bold text-foreground">
                           <MapPin className="h-3.5 w-3.5 shrink-0 text-[#1a237e]" />
-                          <span className="truncate">{s.name}</span>
+                          <span className="truncate">{s.busStop.name}</span>
                           {isMine ? (
                             <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
                               My stop
@@ -182,7 +164,7 @@ export default function StudentTransportPage() {
                       </div>
                       <p className="flex items-center gap-1.5 text-xs font-bold text-[#1a237e]">
                         <Clock className="h-3.5 w-3.5" />
-                        {s.time || "—"}
+                        {s.estimatedArrivalTime || "—"}
                       </p>
                     </div>
                   </li>

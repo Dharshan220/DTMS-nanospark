@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { ChevronRight, MessageSquareWarning, Search } from "lucide-react";
+import { MessageSquareWarning, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,73 +19,59 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { api } from "@/lib/api";
-import { formatDateTime, initials } from "@/lib/faculty";
+import { formatDateTime } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import StatCard from "@/components/faculty/StatCard";
-import { ComplaintStatusBadge } from "@/components/faculty/Badges";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import {
-  COMPLAINT_CATEGORIES,
-  type Complaint,
-  type ComplaintStatus,
-} from "@/types/faculty";
+import type { NotificationItem, Paginated } from "@/types/faculty";
 
 export default function FacultyComplaintsPage() {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"all" | ComplaintStatus>("all");
-  const [category, setCategory] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
-  const complaintsQuery = useQuery({
-    queryKey: ["faculty-complaints"],
-    queryFn: () => api.get<{ items: Complaint[]; total: number }>("/complaints?limit=100"),
+  const notificationsQuery = useQuery({
+    queryKey: ["faculty-notifications"],
+    queryFn: () => api.get<Paginated<NotificationItem>>("/notifications?limit=100"),
   });
 
-  const complaints = useMemo(() => complaintsQuery.data?.items ?? [], [complaintsQuery.data]);
+  const notifications = useMemo(() => notificationsQuery.data?.data ?? [], [notificationsQuery.data]);
 
-  const counts = useMemo(() => {
-    const c: Record<ComplaintStatus | "all", number> = {
-      all: complaints.length,
-      pending: 0,
-      under_review: 0,
-      in_progress: 0,
-      resolved: 0,
-      escalated: 0,
-    };
-    for (const x of complaints) c[x.status] += 1;
-    return c;
-  }, [complaints]);
+  const complaintNotifications = useMemo(
+    () => notifications.filter((n) => n.type === "COMPLAINT" || n.title.toLowerCase().includes("complaint")),
+    [notifications]
+  );
+
+  const types = useMemo(
+    () => [...new Set(complaintNotifications.map((n) => n.type))].sort(),
+    [complaintNotifications]
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return complaints.filter((c) => {
-      if (status !== "all" && c.status !== status) return false;
-      if (category !== "all" && c.category !== category) return false;
-      if (q && !`${c.name} ${c.description} ${c.category}`.toLowerCase().includes(q)) return false;
+    return complaintNotifications.filter((n) => {
+      if (typeFilter !== "all" && n.type !== typeFilter) return false;
+      if (q && !`${n.title} ${n.message}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [complaints, search, status, category]);
+  }, [complaintNotifications, search, typeFilter]);
 
-  if (complaintsQuery.isLoading) return <PageSkeleton rows={6} />;
-  if (complaintsQuery.isError) {
-    return <PageError message="Could not load complaints." onRetry={() => void complaintsQuery.refetch()} />;
+  if (notificationsQuery.isLoading) return <PageSkeleton rows={6} />;
+  if (notificationsQuery.isError) {
+    return <PageError message="Could not load complaints." onRetry={() => void notificationsQuery.refetch()} />;
   }
 
   return (
     <>
       <PageHeader
         title="Complaints & Feedback"
-        description="Complaints and feedback raised by students on your bus, plus your own submissions."
+        description="Complaints and feedback notifications related to your bus."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Total" value={counts.all} icon={MessageSquareWarning} />
-        <StatCard label="Pending" value={counts.pending} icon={MessageSquareWarning} tone="warning" />
-        <StatCard label="In Progress" value={counts.in_progress} icon={MessageSquareWarning} tone="navy" />
-        <StatCard label="Resolved" value={counts.resolved} icon={MessageSquareWarning} tone="success" />
-        <StatCard label="Escalated" value={counts.escalated} icon={MessageSquareWarning} tone="danger" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard label="Total Notifications" value={complaintNotifications.length} icon={MessageSquareWarning} />
+        <StatCard label="Unread" value={complaintNotifications.filter((n) => !n.readAt).length} icon={MessageSquareWarning} tone="warning" />
+        <StatCard label="All Notifications" value={notifications.length} icon={MessageSquareWarning} tone="navy" />
       </div>
 
       <Card className="shadow-card">
@@ -97,98 +82,69 @@ export default function FacultyComplaintsPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by student, subject or category…"
+                placeholder="Search by subject or description…"
                 className="pl-9"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="under_review">Under Review</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="escalated">Escalated</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {COMPLAINT_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-9 w-44 text-xs">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {types.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-border">
             <Table>
               <TableHeader>
                 <TableRow className="bg-secondary/50">
-                  <TableHead className="text-[11px] uppercase">Student</TableHead>
-                  <TableHead className="text-[11px] uppercase">Register No</TableHead>
-                  <TableHead className="text-[11px] uppercase">Bus</TableHead>
-                  <TableHead className="text-[11px] uppercase">Category</TableHead>
-                  <TableHead className="text-[11px] uppercase">Subject</TableHead>
+                  <TableHead className="text-[11px] uppercase">Title</TableHead>
+                  <TableHead className="text-[11px] uppercase">Type</TableHead>
+                  <TableHead className="text-[11px] uppercase">Message</TableHead>
                   <TableHead className="text-[11px] uppercase">Date</TableHead>
                   <TableHead className="text-[11px] uppercase">Status</TableHead>
-                  <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-40">
-                      <EmptyState message="No complaints match your filters." />
+                    <TableCell colSpan={5} className="h-40">
+                      <EmptyState message="No complaint notifications match your filters." />
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className="cursor-pointer hover:bg-secondary/40"
-                      onClick={() => navigate(`/faculty/complaints/${c.id}`)}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-[#1a237e]/10 text-[10px] font-bold text-[#1a237e]">
-                              {initials(c.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="whitespace-nowrap text-xs font-bold text-foreground">{c.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {c.studentRollNo ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {c.busVehicleNumber ?? `Route ${c.routeNumber ?? "—"}`}
+                  filtered.map((n) => (
+                    <TableRow key={n.id} className="hover:bg-secondary/40">
+                      <TableCell className="max-w-[200px]">
+                        <p className="truncate text-xs font-bold text-foreground">{n.title}</p>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
-                          {c.category}
+                          {n.type}
                         </Badge>
                       </TableCell>
                       <TableCell className="max-w-[220px]">
-                        <p className="truncate text-xs font-semibold text-foreground">{c.description}</p>
+                        <p className="truncate text-xs font-semibold text-muted-foreground">{n.message}</p>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDateTime(c.createdAt)}
+                        {formatDateTime(n.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <ComplaintStatusBadge status={c.status} />
-                      </TableCell>
-                      <TableCell>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <Badge
+                          variant="outline"
+                          className={`whitespace-nowrap ${
+                            n.readAt
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {n.readAt ? "Read" : "Unread"}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))
@@ -198,8 +154,7 @@ export default function FacultyComplaintsPage() {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Students cannot edit or delete their submissions. Faculty respond, update status and escalate;
-            permanent deletion is reserved for the transport department.
+            Complaint-related notifications from students and the transport department.
           </p>
         </CardContent>
       </Card>

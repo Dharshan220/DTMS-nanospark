@@ -27,7 +27,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,9 +38,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { initials } from "@/lib/faculty";
 import { publicAsset } from "@/lib/publicAsset";
-import type { NotificationItem } from "@/types/faculty";
+import type { NotificationItem, Paginated } from "@/types/faculty";
 
 interface NavEntry {
   label: string;
@@ -61,6 +60,10 @@ function pageTitleFor(pathname: string): string {
     (n) => (n.end ? pathname === n.path : pathname.startsWith(n.path))
   );
   return entry?.label ?? "Student Panel";
+}
+
+function userInitials(email: string): string {
+  return email?.split("@")[0]?.slice(0, 2)?.toUpperCase() ?? "ST";
 }
 
 function StudentClock() {
@@ -122,20 +125,19 @@ function AppSidebar() {
       <SidebarFooter>
         <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 group-data-[collapsible=icon]:justify-center">
           <Avatar className="h-8 w-8">
-            {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={user.name} /> : null}
             <AvatarFallback className="bg-[#1a237e] text-[10px] font-bold text-white">
-              {user ? initials(user.name) : "?"}
+              {user ? userInitials(user.email) : "?"}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-xs font-bold text-foreground">{user?.name}</p>
+            <p className="truncate text-xs font-bold text-foreground">{user?.email}</p>
             <p className="truncate text-[10px] text-muted-foreground">Student</p>
           </div>
           <button
             type="button"
             title="Log out"
             onClick={() => {
-              logout();
+              void logout();
               navigate("/login");
             }}
             className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:hidden"
@@ -156,11 +158,11 @@ export default function StudentLayout({ children }: { children?: React.ReactNode
   const title = pageTitleFor(location.pathname);
 
   const { data: notifications } = useQuery({
-    queryKey: ["student-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryKey: ["student-notifications-layout"],
+    queryFn: () => api.get<Paginated<NotificationItem>>("/notifications?page=1&limit=5"),
     refetchInterval: 60000,
   });
-  const unread = notifications?.unread ?? 0;
+  const unread = notifications?.data?.filter((n) => !n.readAt).length ?? 0;
 
   return (
     <SidebarProvider>
@@ -192,16 +194,15 @@ export default function StudentLayout({ children }: { children?: React.ReactNode
               <DropdownMenuTrigger asChild>
                 <button type="button" className="rounded-full outline-none ring-primary focus-visible:ring-2">
                   <Avatar className="h-8 w-8 border border-border">
-                    {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={user.name} /> : null}
                     <AvatarFallback className="bg-[#1a237e] text-[11px] font-bold text-white">
-                      {user ? initials(user.name) : "?"}
+                      {user ? userInitials(user.email) : "?"}
                     </AvatarFallback>
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
-                  <p className="text-sm font-bold">{user?.name}</p>
+                  <p className="text-sm font-bold">Student</p>
                   <p className="text-xs font-normal text-muted-foreground">{user?.email}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -212,7 +213,7 @@ export default function StudentLayout({ children }: { children?: React.ReactNode
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
-                    logout();
+                    void logout();
                     navigate("/login");
                   }}
                   className="text-destructive focus:text-destructive"

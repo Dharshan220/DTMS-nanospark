@@ -21,37 +21,45 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { api } from "@/lib/api";
-import { boardingStatusFor, initials } from "@/lib/faculty";
+import { initials } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
-import { BoardingBadge } from "@/components/faculty/Badges";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { AttendanceRecord, DashboardResponse, Paginated, StudentProfile } from "@/types/faculty";
+import type { FacultyProfile } from "@/types/faculty";
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
+interface TransportStudent {
+  id: string;
+  name: string;
+  registerNumber: string;
+  email: string;
+  department: string | null;
+  year: string | null;
+  gender: string | null;
+  boardingStop: string | null;
 }
 
 export default function FacultyStudentsPage() {
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("all");
   const [year, setYear] = useState("all");
-  const [stop, setStop] = useState("all");
+
+  const profileQuery = useQuery({
+    queryKey: ["faculty-profile"],
+    queryFn: () => api.get<FacultyProfile>("/faculty/profile"),
+  });
 
   const studentsQuery = useQuery({
-    queryKey: ["faculty-students"],
-    queryFn: () => api.get<Paginated<StudentProfile>>("/users?role=student&limit=100"),
-  });
-  const attendanceQuery = useQuery({
-    queryKey: ["faculty-attendance"],
-    queryFn: () => api.get<{ items: AttendanceRecord[] }>("/attendance"),
-  });
-  const dashQuery = useQuery({
-    queryKey: ["faculty-dashboard"],
-    queryFn: () => api.get<DashboardResponse>("/dashboard"),
+    queryKey: ["faculty-transport-students"],
+    queryFn: () => api.get<{ data: TransportStudent[] }>(
+      `/faculty/transport/students`
+    ),
+    enabled: Boolean(profileQuery.data?.transport),
   });
 
-  const students = useMemo(() => studentsQuery.data?.items ?? [], [studentsQuery.data]);
-  const records = useMemo(() => attendanceQuery.data?.items ?? [], [attendanceQuery.data]);
+  const profile = profileQuery.data;
+  const transport = profile?.transport;
+  const bus = transport?.bus;
+  const route = bus?.route;
+  const students = useMemo(() => studentsQuery.data?.data ?? [], [studentsQuery.data]);
 
   const departments = useMemo(
     () => [...new Set(students.map((s) => s.department).filter(Boolean) as string[])].sort(),
@@ -61,43 +69,35 @@ export default function FacultyStudentsPage() {
     () => [...new Set(students.map((s) => s.year).filter(Boolean) as string[])].sort(),
     [students]
   );
-  const stops = useMemo(
-    () => [...new Set(students.map((s) => s.boardingStop).filter(Boolean) as string[])].sort(),
-    [students]
-  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return students.filter((s) => {
       if (department !== "all" && s.department !== department) return false;
       if (year !== "all" && s.year !== year) return false;
-      if (stop !== "all" && s.boardingStop !== stop) return false;
       if (q) {
-        const hay = `${s.name} ${s.rollNo ?? ""} ${s.email ?? ""}`.toLowerCase();
+        const hay = `${s.name} ${s.registerNumber ?? ""} ${s.email ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [students, search, department, year, stop]);
+  }, [students, search, department, year]);
 
-  if (studentsQuery.isLoading || attendanceQuery.isLoading || dashQuery.isLoading) {
-    return <PageSkeleton rows={6} />;
-  }
-  if (studentsQuery.isError || attendanceQuery.isError) {
-    return <PageError message="Could not load the student list." onRetry={() => { void studentsQuery.refetch(); void attendanceQuery.refetch(); }} />;
+  if (profileQuery.isLoading) return <PageSkeleton rows={6} />;
+  if (profileQuery.isError) {
+    return <PageError message="Could not load the student list." onRetry={() => void profileQuery.refetch()} />;
   }
 
-  const routeNumber = dashQuery.data?.myBus?.routeNumber;
+  const routeNumber = bus?.busNumber;
 
   const handleExport = () => {
-    const header = ["Register Number", "Student Name", "Department", "Year", "Boarding Stop", "Boarding Status"];
+    const header = ["Register Number", "Student Name", "Department", "Year", "Boarding Stop"];
     const rows = filtered.map((s) => [
-      s.rollNo ?? "",
+      s.registerNumber ?? "",
       s.name,
       s.department ?? "",
       s.year ?? "",
       s.boardingStop ?? "",
-      boardingStatusFor(s, records, today(), "morning").replace("_", " "),
     ]);
     const csv = [header, ...rows]
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
@@ -136,7 +136,7 @@ export default function FacultyStudentsPage() {
                 className="pl-9"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Select value={department} onValueChange={setDepartment}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Department" />
@@ -159,17 +159,6 @@ export default function FacultyStudentsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={stop} onValueChange={setStop}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Boarding stop" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All stops</SelectItem>
-                  {stops.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -182,13 +171,12 @@ export default function FacultyStudentsPage() {
                   <TableHead className="text-[11px] uppercase">Department</TableHead>
                   <TableHead className="text-[11px] uppercase">Year</TableHead>
                   <TableHead className="text-[11px] uppercase">Boarding Stop</TableHead>
-                  <TableHead className="text-[11px] uppercase">Boarding Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-40">
+                    <TableCell colSpan={5} className="h-40">
                       <EmptyState message="No students match your filters." />
                     </TableCell>
                   </TableRow>
@@ -206,14 +194,11 @@ export default function FacultyStudentsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
-                        {s.rollNo ?? "—"}
+                        {s.registerNumber ?? "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">{s.department ?? "—"}</TableCell>
                       <TableCell className="whitespace-nowrap text-xs">Year {s.year ?? "—"}</TableCell>
                       <TableCell className="whitespace-nowrap text-xs">{s.boardingStop ?? "—"}</TableCell>
-                      <TableCell>
-                        <BoardingBadge status={boardingStatusFor(s, records, today(), "morning")} />
-                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -223,8 +208,7 @@ export default function FacultyStudentsPage() {
 
           <div className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>
-              Showing {filtered.length} of {students.length} students · Boarding status is for today&apos;s
-              morning trip; students without an attendance record are estimated by the demo service.
+              Showing {filtered.length} of {students.length} students.
             </p>
             {students.length === 0 && (
               <p className="flex items-center gap-1.5 font-semibold text-amber-700">

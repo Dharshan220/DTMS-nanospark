@@ -21,80 +21,94 @@ import { ComplaintStatusBadge } from "@/components/faculty/Badges";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
 import type {
   Complaint,
-  DashboardResponse,
   NotificationItem,
   Paginated,
+  StudentProfile,
+  StudentSchedule,
 } from "@/types/faculty";
 
 export default function StudentDashboardPage() {
   const { user } = useAuth();
 
-  const dashQuery = useQuery({
-    queryKey: ["student-dashboard"],
-    queryFn: () => api.get<DashboardResponse>("/dashboard"),
+  const profileQuery = useQuery({
+    queryKey: ["student-profile"],
+    queryFn: () => api.get<StudentProfile>("/student/profile"),
+  });
+
+  const schedulesQuery = useQuery({
+    queryKey: ["student-schedules"],
+    queryFn: () => api.get<StudentSchedule>("/student/schedules/my"),
   });
 
   const complaintsQuery = useQuery({
     queryKey: ["student-complaints"],
-    queryFn: () => api.get<Paginated<Complaint>>("/complaints?limit=50"),
+    queryFn: () => api.get<Paginated<Complaint>>("/student/complaints?page=1&limit=50"),
   });
 
   const notificationsQuery = useQuery({
     queryKey: ["student-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryFn: () => api.get<Paginated<NotificationItem>>("/notifications?page=1&limit=20"),
   });
 
-  if (dashQuery.isLoading) return <PageSkeleton />;
-  if (dashQuery.isError) {
+  if (profileQuery.isLoading) return <PageSkeleton />;
+  if (profileQuery.isError) {
     return (
       <PageError
         message="Could not load your transport summary. Check that the transport server is running."
-        onRetry={() => void dashQuery.refetch()}
+        onRetry={() => void profileQuery.refetch()}
       />
     );
   }
 
-  const dash = dashQuery.data!;
-  const complaints = complaintsQuery.data!;
-  const notifications = notificationsQuery.data!;
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus ?? null;
+  const busStop = transport?.busStop ?? null;
+  const route = bus?.route ?? null;
+  const stops = route?.stops ?? [];
+  const firstStop = stops[0];
+  const collegeStop = stops.find(
+    (s) => s.busStop.name.toUpperCase() === "COLLEGE"
+  );
 
-  const route = dash.route;
-  const bus = dash.myBus;
-  const firstStop = route?.stops[0];
-  const collegeStop = route?.stops.find((s) => s.name.toUpperCase() === "COLLEGE");
+  const complaints = complaintsQuery.data;
+  const notifications = notificationsQuery.data;
+  const complaintItems = complaints?.data ?? [];
+  const notificationItems = notifications?.data ?? [];
+  const pendingCount = complaintItems.filter((c) => c.status === "OPEN").length;
 
   return (
     <>
       <PageHeader
-        title={`Welcome back, ${user?.name.split(" ")[0] ?? "Student"}`}
+        title={`Welcome back, ${profile.name.split(" ")[0] ?? "Student"}`}
         description="Here is your transport information and recent activity."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="My Bus"
-          value={bus ? `Route ${bus.routeNumber}` : "—"}
-          sub={bus?.vehicleNumber ?? "No bus assigned"}
+          value={bus ? `Route ${bus.busNumber}` : "—"}
+          sub={bus?.registrationNumber ?? "No bus assigned"}
           icon={Bus}
         />
         <StatCard
           label="Boarding Stop"
-          value={user?.boardingStop ?? "—"}
-          sub={route ? `Route ${route.routeNumber}` : "no route assigned"}
+          value={busStop?.name ?? "—"}
+          sub={route ? `Route ${route.routeCode}` : "no route assigned"}
           icon={MapPin}
           tone="gold"
         />
         <StatCard
           label="My Complaints"
-          value={complaints.total}
-          sub={`${complaints.items.filter((c) => c.status === "pending").length} pending`}
+          value={complaints?.pagination.total ?? complaintItems.length}
+          sub={`${pendingCount} pending`}
           icon={MessageSquareWarning}
           tone="warning"
         />
         <StatCard
           label="Notifications"
-          value={notifications.unread}
-          sub={notifications.unread > 0 ? "unread" : "all caught up"}
+          value={notifications?.pagination.total ?? notificationItems.length}
+          sub={notificationItems.some((n) => !n.readAt) ? "unread" : "all caught up"}
           icon={Bell}
           tone="success"
         />
@@ -108,7 +122,7 @@ export default function StudentDashboardPage() {
               My Bus
             </CardTitle>
             <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
-              {bus?.status === "maintenance" ? "In maintenance" : "In service"}
+              {bus?.status === "MAINTENANCE" ? "In maintenance" : "In service"}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -118,18 +132,18 @@ export default function StudentDashboardPage() {
               </div>
               <div>
                 <p className="text-lg font-extrabold text-foreground">
-                  Route {bus?.routeNumber ?? "—"}
+                  Route {bus?.busNumber ?? "—"}
                 </p>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  {bus?.vehicleNumber ?? "No bus assigned"}
+                  {bus?.registrationNumber ?? "No bus assigned"}
                 </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoRow label="Driver" value={bus?.driverName || "—"} />
-              <InfoRow label="Driver contact" value={bus?.driverPhone || "—"} />
-              <InfoRow label="My boarding stop" value={user?.boardingStop || "—"} />
-              <InfoRow label="Department" value={user?.department || "—"} />
+              <InfoRow label="Driver" value={bus?.driver?.name || "—"} />
+              <InfoRow label="Driver contact" value={bus?.driver?.phone || "—"} />
+              <InfoRow label="My boarding stop" value={busStop?.name || "—"} />
+              <InfoRow label="Department" value={profile.department || "—"} />
             </div>
             <Link
               to="/student/transport"
@@ -147,21 +161,33 @@ export default function StudentDashboardPage() {
               My Route
             </CardTitle>
             <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
-              Route {route?.routeNumber ?? "—"}
+              Route {route?.routeCode ?? "—"}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 shrink-0 text-[#1a237e]" />
-              <span className="font-semibold text-foreground">{firstStop?.name ?? "—"}</span>
+              <span className="font-semibold text-foreground">
+                {firstStop?.busStop.name ?? "—"}
+              </span>
               <span className="text-muted-foreground">→</span>
-              <span className="font-semibold text-foreground">{collegeStop?.name ?? "College"}</span>
+              <span className="font-semibold text-foreground">
+                {collegeStop?.busStop.name ?? "College"}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoRow label="Departure" value={firstStop?.time ?? "—"} />
-              <InfoRow label="College arrival" value={route?.arrivalTime ?? "—"} />
-              <InfoRow label="Boarding stop" value={user?.boardingStop || "—"} />
-              <InfoRow label="Stops on route" value={String(route?.stops.length ?? 0)} />
+              <InfoRow
+                label="Departure"
+                value={firstStop?.estimatedArrivalTime ?? "—"}
+              />
+              <InfoRow
+                label="College arrival"
+                value={
+                  collegeStop?.estimatedArrivalTime ?? "—"
+                }
+              />
+              <InfoRow label="Boarding stop" value={busStop?.name || "—"} />
+              <InfoRow label="Stops on route" value={String(stops.length)} />
             </div>
             <Link
               to="/student/transport"
@@ -185,17 +211,17 @@ export default function StudentDashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            {complaints.items.length === 0 ? (
+            {complaintItems.length === 0 ? (
               <EmptyState message="No complaints yet" hint="Report an issue from the Complaints page." />
             ) : (
               <ul className="divide-y divide-border">
-                {complaints.items.slice(0, 5).map((c) => (
+                {complaintItems.slice(0, 5).map((c) => (
                   <li key={c.id} className="flex items-center gap-3 py-2.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a237e]/10 text-[10px] font-bold text-[#1a237e]">
-                      {initials(c.name)}
+                      {initials(c.student?.name ?? profile.name)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-bold text-foreground">{c.category}</p>
+                      <p className="truncate text-xs font-bold text-foreground">{c.subject}</p>
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">
                         {c.description}
                       </p>
@@ -222,18 +248,18 @@ export default function StudentDashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            {notifications.items.length === 0 ? (
+            {notificationItems.length === 0 ? (
               <EmptyState message="No notifications yet" />
             ) : (
               <ul className="divide-y divide-border">
-                {notifications.items.slice(0, 5).map((n) => (
+                {notificationItems.slice(0, 5).map((n) => (
                   <li key={n.id} className="flex items-start gap-3 py-2.5">
                     <span
-                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-slate-300" : "bg-[#FFD700] ring-1 ring-[#caa200]"}`}
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.readAt ? "bg-slate-300" : "bg-[#FFD700] ring-1 ring-[#caa200]"}`}
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-foreground">{n.title}</p>
-                      <p className="line-clamp-1 text-[11px] text-muted-foreground">{n.body}</p>
+                      <p className="line-clamp-1 text-[11px] text-muted-foreground">{n.message}</p>
                     </div>
                     <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">
                       {formatRelative(n.createdAt)}

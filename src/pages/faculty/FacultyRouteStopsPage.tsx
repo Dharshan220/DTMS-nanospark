@@ -3,29 +3,50 @@ import { Bus, CalendarClock, Flag, MapPin, Route as RouteIcon } from "lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
-import { routeDistanceKm, timeToMinutes } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import { PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { RouteInfo, TrackingResponse } from "@/types/faculty";
+import type { FacultyProfile } from "@/types/faculty";
 
 export default function FacultyRouteStopsPage() {
-  const routeQuery = useQuery({
-    queryKey: ["faculty-route"],
-    queryFn: () => api.get<TrackingResponse>("/tracking/my"),
+  const profileQuery = useQuery({
+    queryKey: ["faculty-profile"],
+    queryFn: () => api.get<FacultyProfile>("/faculty/profile"),
   });
 
-  if (routeQuery.isLoading) return <PageSkeleton rows={5} />;
-  if (routeQuery.isError) {
-    return <PageError message="Could not load your route information." onRetry={() => void routeQuery.refetch()} />;
+  if (profileQuery.isLoading) return <PageSkeleton rows={5} />;
+  if (profileQuery.isError) {
+    return <PageError message="Could not load your route information." onRetry={() => void profileQuery.refetch()} />;
   }
 
-  const route: RouteInfo = routeQuery.data!.route;
-  const stops = route.boardingPoints.length ? route.boardingPoints : route.stops;
-  const first = stops[0];
-  const college = stops.find((s) => s.name.toUpperCase() === "COLLEGE");
-  const distance = routeDistanceKm(route.path);
+  const profile = profileQuery.data!;
+  const transport = profile.transport;
+  const bus = transport?.bus;
+  const route = bus?.route;
 
-  const totalMinutes = timeToMinutes(route.arrivalTime) - (first ? timeToMinutes(first.time) : 0);
+  const routeStops = route?.stops
+    ?.sort((a, b) => a.stopOrder - b.stopOrder)
+    .map((s) => ({
+      name: s.busStop.name,
+      time: s.estimatedArrivalTime ?? "—",
+      lat: s.busStop.latitude ?? undefined,
+      lng: s.busStop.longitude ?? undefined,
+    })) ?? [];
+
+  const first = routeStops[0];
+  const college = routeStops.find((s) => s.name.toUpperCase() === "COLLEGE");
+  const totalMinutes = routeStops.length > 1 ? 60 : 0;
+
+  if (!route) {
+    return (
+      <>
+        <PageHeader
+          title="Route & Stops"
+          description="Your assigned route and its stop schedule (managed by the transport department)."
+        />
+        <PageError message="No route is assigned to your bus yet." />
+      </>
+    );
+  }
 
   return (
     <>
@@ -34,7 +55,7 @@ export default function FacultyRouteStopsPage() {
         description="Your assigned route and its stop schedule (managed by the transport department)."
         actions={
           <Badge variant="outline" className="border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]">
-            Route {route.routeNumber}
+            Route {route.routeCode}
           </Badge>
         }
       />
@@ -53,17 +74,15 @@ export default function FacultyRouteStopsPage() {
                 <Bus className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-lg font-extrabold">Route {route.routeNumber}</p>
-                <p className="text-[11px] font-semibold text-white/70">{route.vehicleNumber || "Bus assigned by transport dept."}</p>
+                <p className="text-lg font-extrabold">Route {route.routeCode}</p>
+                <p className="text-[11px] font-semibold text-white/70">{bus?.registrationNumber || "Bus assigned by transport dept."}</p>
               </div>
             </div>
-            <Detail label="Route number" value={`Route ${route.routeNumber}`} />
+            <Detail label="Route number" value={`Route ${route.routeCode}`} />
+            <Detail label="Route name" value={route.routeName || "—"} />
             <Detail label="Starting point" value={first ? first.name : "—"} />
             <Detail label="Destination" value={college?.name ?? "College"} />
-            <Detail label="Departure" value={first ? first.time : "—"} />
-            <Detail label="Expected arrival" value={route.arrivalTime} />
-            <Detail label="Total stops" value={String(stops.length)} />
-            <Detail label="Approx. distance" value={distance != null ? `${distance} km` : "—"} />
+            <Detail label="Total stops" value={String(routeStops.length)} />
           </CardContent>
         </Card>
 
@@ -76,10 +95,10 @@ export default function FacultyRouteStopsPage() {
           </CardHeader>
           <CardContent>
             <ol className="relative space-y-0">
-              {stops.map((s, i) => {
+              {routeStops.map((s, i) => {
                 const isCollege = s.name.toUpperCase() === "COLLEGE";
-                const isLast = i === stops.length - 1;
-                const etaMin = Math.round((i / Math.max(1, stops.length - 1)) * totalMinutes);
+                const isLast = i === routeStops.length - 1;
+                const etaMin = Math.round((i / Math.max(1, routeStops.length - 1)) * totalMinutes);
                 return (
                   <li key={`${s.name}-${i}`} className="relative flex gap-3 pb-4">
                     {!isLast && (

@@ -13,32 +13,50 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
-import { formatDateTime, notificationCategory } from "@/lib/faculty";
+import { formatDateTime } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import type { NotificationItem, NotificationType } from "@/types/faculty";
+import type { NotificationItem, NotificationType, Paginated } from "@/types/faculty";
 
 const CATEGORY_TONE: Record<NotificationType, string> = {
-  "Bus Delay": "border-amber-200 bg-amber-50 text-amber-700",
-  "Route Change": "border-indigo-200 bg-indigo-50 text-indigo-700",
-  "Bus Replacement": "border-purple-200 bg-purple-50 text-purple-700",
-  Emergency: "border-red-200 bg-red-50 text-red-700",
-  "Complaint Update": "border-sky-200 bg-sky-50 text-sky-700",
-  "Transport Announcement": "border-[#f0c200] bg-[#FFD700]/10 text-[#8a6d00]",
-  General: "border-slate-200 bg-slate-100 text-slate-600",
+  EMERGENCY: "border-red-200 bg-red-50 text-red-700",
+  COMPLAINT: "border-sky-200 bg-sky-50 text-sky-700",
+  FEEDBACK: "border-amber-200 bg-amber-50 text-amber-700",
+  TRANSPORT: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  SYSTEM: "border-slate-200 bg-slate-100 text-slate-600",
 };
+
+const CATEGORY_LABELS: Record<NotificationType, string> = {
+  EMERGENCY: "Emergency",
+  COMPLAINT: "Complaint Update",
+  FEEDBACK: "Feedback",
+  TRANSPORT: "Transport",
+  SYSTEM: "System",
+};
+
+function resolveNotificationType(n: NotificationItem): NotificationType {
+  const raw = (n.type ?? "").toUpperCase() as NotificationType;
+  if (raw in CATEGORY_LABELS) return raw;
+  if (raw.includes("EMERGENCY")) return "EMERGENCY";
+  if (raw.includes("COMPLAINT")) return "COMPLAINT";
+  if (raw.includes("FEEDBACK")) return "FEEDBACK";
+  if (raw.includes("TRANSPORT")) return "TRANSPORT";
+  return "SYSTEM";
+}
 
 export default function StudentNotificationsPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"all" | NotificationType>("all");
+  const [page, setPage] = useState(1);
 
   const notificationsQuery = useQuery({
-    queryKey: ["student-notifications"],
-    queryFn: () => api.get<{ items: NotificationItem[]; unread: number }>("/notifications"),
+    queryKey: ["student-notifications", page],
+    queryFn: () =>
+      api.get<Paginated<NotificationItem>>(`/notifications?page=${page}&limit=20`),
   });
 
   const readMutation = useMutation({
-    mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["student-notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
@@ -47,7 +65,7 @@ export default function StudentNotificationsPage() {
   });
 
   const readAllMutation = useMutation({
-    mutationFn: () => api.put("/notifications/read-all"),
+    mutationFn: () => api.patch("/notifications/read-all"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["student-notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
@@ -56,11 +74,12 @@ export default function StudentNotificationsPage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update notifications"),
   });
 
-  const items = useMemo(() => notificationsQuery.data?.items ?? [], [notificationsQuery.data]);
-  const unread = notificationsQuery.data?.unread ?? 0;
+  const items = useMemo(() => notificationsQuery.data?.data ?? [], [notificationsQuery.data]);
+  const pagination = notificationsQuery.data?.pagination;
+  const unreadCount = items.filter((n) => !n.readAt).length;
 
   const filtered = useMemo(
-    () => (filter === "all" ? items : items.filter((n) => notificationCategory(n) === filter)),
+    () => (filter === "all" ? items : items.filter((n) => resolveNotificationType(n) === filter)),
     [items, filter]
   );
 
@@ -84,7 +103,7 @@ export default function StudentNotificationsPage() {
             variant="outline"
             size="sm"
             onClick={() => readAllMutation.mutate()}
-            disabled={unread === 0 || readAllMutation.isPending}
+            disabled={unreadCount === 0 || readAllMutation.isPending}
           >
             <CheckCheck className="h-4 w-4" />
             Mark all as read
@@ -95,7 +114,7 @@ export default function StudentNotificationsPage() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
           <Bell className="h-4 w-4" />
-          {unread > 0 ? `${unread} unread` : "All caught up"}
+          {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
         </p>
         <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
           <SelectTrigger className="h-9 w-52 text-xs">
@@ -103,13 +122,11 @@ export default function StudentNotificationsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            <SelectItem value="Bus Delay">Bus Delay</SelectItem>
-            <SelectItem value="Route Change">Route Change</SelectItem>
-            <SelectItem value="Bus Replacement">Bus Replacement</SelectItem>
-            <SelectItem value="Emergency">Emergency</SelectItem>
-            <SelectItem value="Complaint Update">Complaint Update</SelectItem>
-            <SelectItem value="Transport Announcement">Transport Announcement</SelectItem>
-            <SelectItem value="General">General</SelectItem>
+            <SelectItem value="EMERGENCY">Emergency</SelectItem>
+            <SelectItem value="COMPLAINT">Complaint Update</SelectItem>
+            <SelectItem value="FEEDBACK">Feedback</SelectItem>
+            <SelectItem value="TRANSPORT">Transport</SelectItem>
+            <SelectItem value="SYSTEM">System</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -126,32 +143,33 @@ export default function StudentNotificationsPage() {
       ) : (
         <div className="space-y-2.5">
           {filtered.map((n) => {
-            const cat = notificationCategory(n);
+            const cat = resolveNotificationType(n);
+            const isRead = !!n.readAt;
             return (
               <Card
                 key={n.id}
-                className={`shadow-card transition ${n.read ? "opacity-75" : "border-l-4 border-l-[#caa200]"}`}
+                className={`shadow-card transition ${isRead ? "opacity-75" : "border-l-4 border-l-[#caa200]"}`}
               >
                 <CardContent className="flex items-start gap-3 p-4">
                   <span
-                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${n.read ? "bg-slate-300" : "bg-[#FFD700] ring-2 ring-[#caa200]/40"}`}
-                    title={n.read ? "Read" : "Unread"}
+                    className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${isRead ? "bg-slate-300" : "bg-[#FFD700] ring-2 ring-[#caa200]/40"}`}
+                    title={isRead ? "Read" : "Unread"}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className={`text-sm ${n.read ? "font-semibold" : "font-extrabold"} text-foreground`}>
+                      <p className={`text-sm ${isRead ? "font-semibold" : "font-extrabold"} text-foreground`}>
                         {n.title}
                       </p>
-                      <Badge variant="outline" className={`text-[10px] ${CATEGORY_TONE[cat]}`}>
-                        {cat}
+                      <Badge variant="outline" className={`text-[10px] ${CATEGORY_TONE[cat] ?? CATEGORY_TONE.SYSTEM}`}>
+                        {CATEGORY_LABELS[cat] ?? cat}
                       </Badge>
                     </div>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{n.body}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{n.message}</p>
                     <p className="mt-1 text-[11px] font-semibold text-muted-foreground/80">
                       {formatDateTime(n.createdAt)}
                     </p>
                   </div>
-                  {!n.read ? (
+                  {!isRead ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -167,6 +185,30 @@ export default function StudentNotificationsPage() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Page {page} of {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= pagination.totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
         </div>
       )}
 

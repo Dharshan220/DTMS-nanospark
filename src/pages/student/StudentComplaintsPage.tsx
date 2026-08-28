@@ -6,6 +6,7 @@ import {
   MessageSquareWarning,
   Send,
   ShieldCheck,
+  Star,
   Truck,
   UserRound,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,12 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { formatDateTime, initials } from "@/lib/faculty";
 import PageHeader from "@/components/faculty/PageHeader";
 import StatCard from "@/components/faculty/StatCard";
 import { ComplaintStatusBadge } from "@/components/faculty/Badges";
 import { EmptyState, PageError, PageSkeleton } from "@/components/faculty/DataState";
-import { COMPLAINT_CATEGORIES, type Complaint } from "@/types/faculty";
+import type { Complaint, Feedback, Paginated } from "@/types/faculty";
 
 const REPORT_OPTIONS = [
   { label: "Bus Issue", description: "Problems with the bus itself", categories: ["Bus Breakdown", "Vehicle Problem", "Seat Damage", "Cleanliness"] },
@@ -37,53 +40,117 @@ const REPORT_OPTIONS = [
   { label: "General / Feedback", description: "Suggestions and other feedback", categories: ["General Complaint", "Suggestion", "Other"] },
 ];
 
+const FEEDBACK_CATEGORIES = [
+  "BUS", "ROUTE", "DRIVER", "FACULTY", "SERVICE", "OTHER",
+] as const;
+
 export default function StudentComplaintsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
   const [category, setCategory] = useState("");
+  const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [showAllCategories, setShowAllCategories] = useState(false);
 
+  const [feedbackSubject, setFeedbackSubject] = useState("");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackCategory, setFeedbackCategory] = useState("");
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+
   const complaintsQuery = useQuery({
     queryKey: ["student-complaints"],
-    queryFn: () => api.get<{ items: Complaint[]; total: number }>("/complaints?limit=100"),
+    queryFn: () => api.get<Paginated<Complaint>>("/student/complaints?page=1&limit=100"),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: { category: string; description: string }) =>
-      api.post<{ complaint: Complaint }>("/complaints", payload),
+  const feedbackQuery = useQuery({
+    queryKey: ["student-feedback"],
+    queryFn: () => api.get<Paginated<Feedback>>("/student/feedback?page=1&limit=100"),
+  });
+
+  const createComplaintMutation = useMutation({
+    mutationFn: (payload: { subject: string; description: string; category: string }) =>
+      api.post<Complaint>("/student/complaints", payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["student-complaints"] });
       void queryClient.invalidateQueries({ queryKey: ["student-dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["student-notifications"] });
       setCategory("");
+      setSubject("");
       setDescription("");
       toast.success("Your report has been submitted to the transport office.");
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not submit your report"),
   });
 
-  const complaints = useMemo(() => complaintsQuery.data?.items ?? [], [complaintsQuery.data]);
+  const createFeedbackMutation = useMutation({
+    mutationFn: (payload: { subject: string; message: string; rating: number; category: string }) =>
+      api.post<Feedback>("/student/feedback", payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["student-feedback"] });
+      setFeedbackSubject("");
+      setFeedbackMessage("");
+      setFeedbackRating(5);
+      setFeedbackCategory("");
+      setShowFeedbackForm(false);
+      toast.success("Your feedback has been submitted.");
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not submit feedback"),
+  });
+
+  const complaints = useMemo(() => complaintsQuery.data?.data ?? [], [complaintsQuery.data]);
+  const feedbacks = useMemo(() => feedbackQuery.data?.data ?? [], [feedbackQuery.data]);
 
   const counts = useMemo(() => {
     const c = { total: complaints.length, pending: 0, resolved: 0, inProgress: 0 };
     for (const x of complaints) {
-      if (x.status === "pending") c.pending += 1;
-      else if (x.status === "resolved") c.resolved += 1;
-      else if (x.status === "in_progress" || x.status === "under_review") c.inProgress += 1;
+      if (x.status === "OPEN") c.pending += 1;
+      else if (x.status === "RESOLVED") c.resolved += 1;
+      else if (x.status === "IN_REVIEW") c.inProgress += 1;
     }
     return c;
   }, [complaints]);
 
-  const submit = () => {
+  const submitComplaint = () => {
     if (!category) {
       toast.error("Choose a category for your report.");
+      return;
+    }
+    if (!subject.trim()) {
+      toast.error("Please enter a subject for your report.");
       return;
     }
     if (description.trim().length < 5) {
       toast.error("Please describe the issue in at least 5 characters.");
       return;
     }
-    createMutation.mutate({ category, description: description.trim() });
+    createComplaintMutation.mutate({
+      subject: subject.trim(),
+      description: description.trim(),
+      category,
+    });
+  };
+
+  const submitFeedback = () => {
+    if (!feedbackSubject.trim()) {
+      toast.error("Please enter a subject for your feedback.");
+      return;
+    }
+    if (!feedbackMessage.trim()) {
+      toast.error("Please enter a message for your feedback.");
+      return;
+    }
+    if (!feedbackCategory) {
+      toast.error("Choose a category for your feedback.");
+      return;
+    }
+    createFeedbackMutation.mutate({
+      subject: feedbackSubject.trim(),
+      message: feedbackMessage.trim(),
+      rating: feedbackRating,
+      category: feedbackCategory,
+    });
   };
 
   if (complaintsQuery.isLoading) return <PageSkeleton rows={6} />;
@@ -123,6 +190,17 @@ export default function StudentComplaintsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Subject *
+              </Label>
+              <Input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Brief subject for your report"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 What do you want to report?
               </Label>
               <Select value={category} onValueChange={setCategory}>
@@ -135,34 +213,13 @@ export default function StudentComplaintsPage() {
                       <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                         {group.label}
                       </p>
-                      {group.categories
-                        .filter((c) => COMPLAINT_CATEGORIES.includes(c as (typeof COMPLAINT_CATEGORIES)[number]))
-                        .map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                    </div>
-                  ))}
-                  {showAllCategories ? (
-                    <>
-                      <p className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                        More categories
-                      </p>
-                      {COMPLAINT_CATEGORIES.filter((c) => !quickCategories.includes(c)).map((c) => (
+                      {group.categories.map((c) => (
                         <SelectItem key={c} value={c}>
                           {c}
                         </SelectItem>
                       ))}
-                    </>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setShowAllCategories((v) => !v)}
-                    className="w-full px-2 py-1.5 text-left text-[11px] font-bold text-[#1a237e] hover:bg-secondary/60"
-                  >
-                    {showAllCategories ? "Show fewer categories" : "Show all categories…"}
-                  </button>
+                    </div>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -181,15 +238,15 @@ export default function StudentComplaintsPage() {
 
             <Button
               className="w-full gap-2 bg-[#1a237e] text-white hover:bg-[#283593]"
-              onClick={submit}
-              disabled={createMutation.isPending}
+              onClick={submitComplaint}
+              disabled={createComplaintMutation.isPending}
             >
-              {createMutation.isPending ? (
+              {createComplaintMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              {createMutation.isPending ? "Submitting…" : "Submit Report"}
+              {createComplaintMutation.isPending ? "Submitting…" : "Submit Report"}
             </Button>
 
             <div className="grid gap-2 sm:grid-cols-2">
@@ -240,10 +297,10 @@ export default function StudentComplaintsPage() {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1a237e]/10 text-[10px] font-bold text-[#1a237e]">
-                        {initials(c.name)}
+                        {initials(c.student?.name ?? "")}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-foreground">{c.category}</p>
+                        <p className="text-xs font-bold text-foreground">{c.subject}</p>
                         <p className="text-[10px] font-semibold text-muted-foreground">
                           Submitted {formatDateTime(c.createdAt)}
                         </p>
@@ -253,23 +310,14 @@ export default function StudentComplaintsPage() {
                     <p className="mt-2.5 whitespace-pre-line rounded-xl bg-card px-3 py-2 text-xs leading-relaxed text-foreground">
                       {c.description}
                     </p>
-                    {c.adminResponse ? (
+                    {c.resolutionNote ? (
                       <div className="mt-2 rounded-xl border border-[#f0c200]/40 bg-[#FFD700]/5 px-3 py-2">
                         <p className="text-[10px] font-bold uppercase tracking-wide text-[#8a6d00]">
                           Transport office response
                         </p>
                         <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-foreground">
-                          {c.adminResponse}
+                          {c.resolutionNote}
                         </p>
-                      </div>
-                    ) : null}
-                    {c.history && c.history.length > 1 ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        {c.history.map((h, i) => (
-                          <Badge key={i} variant="outline" className="text-[10px] text-muted-foreground">
-                            {h.status.replace("_", " ")}
-                          </Badge>
-                        ))}
                       </div>
                     ) : null}
                   </li>
@@ -284,6 +332,137 @@ export default function StudentComplaintsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="shadow-card">
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
+            <Star className="h-4 w-4 text-[#1a237e]" />
+            My Feedback ({feedbacks.length})
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowFeedbackForm(!showFeedbackForm)}
+          >
+            {showFeedbackForm ? "Cancel" : "Give Feedback"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {showFeedbackForm && (
+            <div className="space-y-4 rounded-2xl border border-border bg-secondary/20 p-4">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Subject *
+                </Label>
+                <Input
+                  value={feedbackSubject}
+                  onChange={(e) => setFeedbackSubject(e.target.value)}
+                  placeholder="Brief subject for your feedback"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Category *
+                </Label>
+                <Select value={feedbackCategory} onValueChange={setFeedbackCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FEEDBACK_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Rating *
+                </Label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setFeedbackRating(r)}
+                      className="text-xl"
+                    >
+                      <Star
+                        className={`h-5 w-5 ${r <= feedbackRating ? "fill-[#FFD700] text-[#FFD700]" : "text-gray-300"}`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Message *
+                </Label>
+                <Textarea
+                  value={feedbackMessage}
+                  onChange={(e) => setFeedbackMessage(e.target.value)}
+                  placeholder="Tell us about your experience..."
+                  rows={3}
+                />
+              </div>
+              <Button
+                className="w-full gap-2 bg-[#1a237e] text-white hover:bg-[#283593]"
+                onClick={submitFeedback}
+                disabled={createFeedbackMutation.isPending}
+              >
+                {createFeedbackMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {createFeedbackMutation.isPending ? "Submitting…" : "Submit Feedback"}
+              </Button>
+            </div>
+          )}
+
+          {feedbacks.length === 0 && !showFeedbackForm ? (
+            <EmptyState
+              message="No feedback submitted yet."
+              hint="Share your experience with the transport service."
+            />
+          ) : (
+            <ul className="space-y-3">
+              {feedbacks.map((f) => (
+                <li
+                  key={f.id}
+                  className="rounded-2xl border border-border bg-secondary/20 p-4 transition hover:bg-secondary/40"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex gap-0.5">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-3.5 w-3.5 ${i < f.rating ? "fill-[#FFD700] text-[#FFD700]" : "text-gray-300"}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-foreground">{f.subject}</p>
+                      <p className="text-[10px] font-semibold text-muted-foreground">
+                        {f.category} · Submitted {formatDateTime(f.createdAt)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">
+                      {f.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 whitespace-pre-line rounded-xl bg-card px-3 py-2 text-xs leading-relaxed text-foreground">
+                    {f.message}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bus, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import { Bus, Pencil, Plus, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import PageHeader from "@/components/faculty/PageHeader";
@@ -25,54 +25,62 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import FormDialog from "@/components/admin/FormDialog";
-import DeleteConfirm from "@/components/admin/DeleteConfirm";
 import { AdminBusStatusBadge } from "@/components/admin/AdminBadges";
-import type { BusInfo, Driver, ServerBusStatus } from "@/types/faculty";
+import type { BusInfo, Driver, ServerBusStatus, Paginated } from "@/types/faculty";
 
 interface BusForm {
   id: string | null;
-  routeNumber: string;
-  vehicleNumber: string;
+  busNumber: string;
+  registrationNumber: string;
   capacity: string;
-  status: ServerBusStatus;
   driverId: string | null;
 }
 
 /** Radix Select forbids empty-string item values; use a sentinel for "no driver". */
 const NO_DRIVER = "__none__";
 
-const EMPTY: BusForm = { id: null, routeNumber: "", vehicleNumber: "", capacity: "60", status: "active", driverId: null };
+const EMPTY: BusForm = { id: null, busNumber: "", registrationNumber: "", capacity: "60", driverId: null };
 
 export default function AdminBusesPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<BusForm>(EMPTY);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState<BusInfo | null>(null);
 
   const busesQuery = useQuery({
     queryKey: ["admin-buses"],
-    queryFn: () => api.get<{ items: BusInfo[]; total: number }>("/buses"),
+    queryFn: () => api.get<Paginated<BusInfo>>("/admin/buses?page=1&limit=100"),
   });
   const driversQuery = useQuery({
     queryKey: ["admin-drivers"],
-    queryFn: () => api.get<{ items: Driver[]; total: number }>("/drivers"),
+    queryFn: () => api.get<Paginated<Driver>>("/admin/drivers?page=1&limit=100"),
   });
 
   const saveMutation = useMutation({
-    mutationFn: (f: BusForm) => {
-      const payload: Record<string, unknown> = {
-        routeNumber: f.routeNumber,
-        vehicleNumber: f.vehicleNumber,
-        capacity: Number(f.capacity) || 60,
-        status: f.status,
-      };
+    mutationFn: async (f: BusForm) => {
       if (f.id) {
-        if (f.driverId) {
-          return api.put(`/drivers/${f.driverId}/assign-bus`, { busId: f.id }).then(() => api.put(`/buses/${f.id}`, payload));
+        const payload = {
+          busNumber: Number(f.busNumber),
+          registrationNumber: f.registrationNumber,
+          capacity: Number(f.capacity) || 60,
+        };
+        await api.patch(`/admin/buses/${f.id}`, payload);
+
+        const currentBus = busesQuery.data?.data.find((b) => b.id === f.id);
+        const currentDriverId = currentBus?.driverId ?? null;
+        if (f.driverId !== currentDriverId) {
+          await api.patch(`/admin/buses/${f.id}/driver`, {
+            driverId: f.driverId || null,
+          });
         }
-        return api.put(`/buses/${f.id}`, payload);
+      } else {
+        const payload = {
+          busNumber: Number(f.busNumber),
+          registrationNumber: f.registrationNumber,
+          capacity: Number(f.capacity) || 60,
+          driverId: f.driverId || undefined,
+        };
+        await api.post("/admin/buses", payload);
       }
-      return api.post("/buses", payload);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-buses"] });
@@ -85,25 +93,13 @@ export default function AdminBusesPage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not save bus"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.del(`/buses/${id}`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-buses"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-drivers"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      setDeleting(null);
-      toast.success("Bus deleted");
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not delete bus"),
-  });
-
   if (busesQuery.isLoading || driversQuery.isLoading) return <PageSkeleton rows={6} />;
   if (busesQuery.isError || driversQuery.isError) {
     return <PageError message="Could not load bus data." onRetry={() => { void busesQuery.refetch(); void driversQuery.refetch(); }} />;
   }
 
-  const buses = busesQuery.data!.items;
-  const drivers = driversQuery.data!.items;
+  const buses = busesQuery.data!.data;
+  const drivers = driversQuery.data!.data;
 
   const openCreate = () => {
     setForm(EMPTY);
@@ -112,11 +108,10 @@ export default function AdminBusesPage() {
   const openEdit = (bus: BusInfo) => {
     setForm({
       id: bus.id,
-      routeNumber: String(bus.routeNumber),
-      vehicleNumber: bus.vehicleNumber,
+      busNumber: String(bus.busNumber),
+      registrationNumber: bus.registrationNumber,
       capacity: String(bus.capacity ?? 60),
-      status: bus.status,
-      driverId: drivers.find((d) => d.assignedBusId === bus.id)?.id ?? null,
+      driverId: bus.driverId ?? null,
     });
     setDialogOpen(true);
   };
@@ -148,8 +143,8 @@ export default function AdminBusesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Bus No.</TableHead>
+                    <TableHead>Registration</TableHead>
                     <TableHead>Driver</TableHead>
                     <TableHead>Capacity</TableHead>
                     <TableHead>Status</TableHead>
@@ -159,13 +154,13 @@ export default function AdminBusesPage() {
                 <TableBody>
                   {buses.map((bus) => (
                     <TableRow key={bus.id}>
-                      <TableCell className="font-bold">Route {bus.routeNumber}</TableCell>
-                      <TableCell>{bus.vehicleNumber}</TableCell>
+                      <TableCell className="font-bold">Bus {bus.busNumber}</TableCell>
+                      <TableCell>{bus.registrationNumber}</TableCell>
                       <TableCell>
-                        {bus.driverName ? (
+                        {bus.driver ? (
                           <span className="flex items-center gap-1.5">
                             <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
-                            {bus.driverName}
+                            {bus.driver.name}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">Not assigned</span>
@@ -177,15 +172,6 @@ export default function AdminBusesPage() {
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => openEdit(bus)} title="Edit">
                             <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleting(bus)}
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -201,11 +187,11 @@ export default function AdminBusesPage() {
       <FormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={form.id ? `Edit Bus — Route ${form.routeNumber}` : "Add Bus"}
+        title={form.id ? `Edit Bus — ${form.busNumber}` : "Add Bus"}
         description={form.id ? "Update fleet details and driver assignment." : "Register a new bus in the fleet."}
         onSave={() => {
-          if (!form.routeNumber.trim() || !form.vehicleNumber.trim()) {
-            toast.error("Route number and vehicle number are required.");
+          if (!form.busNumber.trim() || !form.registrationNumber.trim()) {
+            toast.error("Bus number and registration number are required.");
             return;
           }
           saveMutation.mutate(form);
@@ -215,19 +201,19 @@ export default function AdminBusesPage() {
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route number *</Label>
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Bus number *</Label>
             <Input
-              value={form.routeNumber}
-              onChange={(e) => setForm({ ...form, routeNumber: e.target.value })}
+              value={form.busNumber}
+              onChange={(e) => setForm({ ...form, busNumber: e.target.value })}
               placeholder="e.g. 25"
               inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Vehicle number *</Label>
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Registration number *</Label>
             <Input
-              value={form.vehicleNumber}
-              onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value })}
+              value={form.registrationNumber}
+              onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
               placeholder="e.g. TN 21 AB 1234"
             />
           </div>
@@ -238,17 +224,6 @@ export default function AdminBusesPage() {
               onChange={(e) => setForm({ ...form, capacity: e.target.value })}
               inputMode="numeric"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</Label>
-            <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as ServerBusStatus })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
         <div className="space-y-1.5">
@@ -262,12 +237,15 @@ export default function AdminBusesPage() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_DRIVER}>— No driver —</SelectItem>
-              {drivers.map((d) => (
-                <SelectItem key={d.id} value={d.id} disabled={d.assignedBusId !== null && d.assignedBusId !== form.id}>
-                  {d.name}
-                  {d.assignedBusId && d.assignedBusId !== form.id ? " (already assigned)" : ""}
-                </SelectItem>
-              ))}
+              {drivers.map((d) => {
+                const isAssignedToOther = d.assignedBus && d.assignedBus.id !== form.id;
+                return (
+                  <SelectItem key={d.id} value={d.id} disabled={!!isAssignedToOther}>
+                    {d.name}
+                    {isAssignedToOther ? ` (assigned to Bus ${d.assignedBus!.busNumber})` : ""}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           <p className="text-[11px] text-muted-foreground">
@@ -275,15 +253,6 @@ export default function AdminBusesPage() {
           </p>
         </div>
       </FormDialog>
-
-      <DeleteConfirm
-        open={deleting !== null}
-        onOpenChange={(o) => { if (!o) setDeleting(null); }}
-        title="Delete this bus?"
-        description={`Route ${deleting?.routeNumber} · ${deleting?.vehicleNumber} will be removed from the fleet.`}
-        onConfirm={() => { if (deleting) deleteMutation.mutate(deleting.id); }}
-        deleting={deleteMutation.isPending}
-      />
     </>
   );
 }

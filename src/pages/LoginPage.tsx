@@ -5,25 +5,24 @@ import { useNavigate } from "react-router-dom";
 import { publicAsset } from "@/lib/publicAsset";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/context/AuthContext";
-import type { LoginRole } from "@/lib/faculty";
 import { ApiError } from "@/lib/api";
 
-const ROLE_LABELS: Record<LoginRole, string> = {
+const ROLE_LABELS: Record<string, string> = {
   student: "Student Login",
   faculty: "Faculty Login",
   admin: "Admin Login",
 };
 
-const DEMO_CREDS: Partial<Record<LoginRole, string>> = {
+const DEMO_CREDS: Record<string, string> = {
   faculty: "teacher@dtms.in / teacher123",
   admin: "admin@dtms.in / admin123",
   student: "student@dtms.in / student123",
 };
 
 export default function LoginPage() {
-  const [role, setRole] = useState<LoginRole>("student");
+  const [role, setRole] = useState<string>("student");
   const [showPreview, setShowPreview] = useState(false);
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -61,9 +60,14 @@ export default function LoginPage() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const user = await login(role, identifier.trim(), password);
+      const user = await login(email.trim(), password);
       setShowPreview(true);
-      const target = user.role === "teacher" ? "/faculty" : user.role === "admin" ? "/admin" : "/student";
+      const target =
+        user.role === "FACULTY"
+          ? "/faculty"
+          : user.role === "ADMIN"
+            ? "/admin"
+            : "/student";
       const id = window.setTimeout(() => navigate(target), 1200);
       setTimer(id);
     } catch (err) {
@@ -163,7 +167,7 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(["student", "faculty", "admin"] as LoginRole[]).map((item) => (
+            {(["student", "faculty", "admin"] as string[]).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -186,16 +190,16 @@ export default function LoginPage() {
             <div className="rounded-2xl border border-[#dce2ff] bg-white px-4 py-3 shadow-inner focus-within:border-[#1a237e] focus-within:ring-1 focus-within:ring-[#FFD700]">
               <label className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-700">
                 <Mail className="h-4 w-4" />
-                Mobile number or email
+                Email address
               </label>
               <div className="mt-1 flex items-center gap-2">
                 <Mail className="h-4 w-4 text-slate-500" />
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter mobile number or college email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your college email"
                   className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
               </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, MapPin, Pencil, Plus, Route, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Plus, Route, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import PageHeader from "@/components/faculty/PageHeader";
@@ -19,48 +19,67 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import FormDialog from "@/components/admin/FormDialog";
-import DeleteConfirm from "@/components/admin/DeleteConfirm";
-import type { RouteInfo } from "@/types/faculty";
+import type { RouteInfo, BusStop, Paginated } from "@/types/faculty";
 
-interface StopRow {
-  name: string;
-  time: string;
+interface BackendRouteStop {
+  id: string;
+  routeId: string;
+  busStopId: string;
+  stopOrder: number;
+  estimatedArrivalTime: string | null;
+  busStop: BusStop;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface RouteForm {
   id: string | null;
-  routeNumber: string;
-  vehicleNumber: string;
-  arrivalTime: string;
-  boardingPoints: StopRow[];
+  routeCode: string;
+  routeName: string;
+  description: string;
 }
 
-const EMPTY: RouteForm = { id: null, routeNumber: "", vehicleNumber: "", arrivalTime: "8:05 AM", boardingPoints: [] };
+const EMPTY: RouteForm = { id: null, routeCode: "", routeName: "", description: "" };
 
 export default function AdminRoutesPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<RouteForm>(EMPTY);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState<RouteInfo | null>(null);
+  const [deactivating, setDeactivating] = useState<RouteInfo | null>(null);
 
   const routesQuery = useQuery({
     queryKey: ["admin-routes"],
-    queryFn: () => api.get<{ items: RouteInfo[]; total: number }>("/transport"),
+    queryFn: () => api.get<Paginated<RouteInfo>>("/admin/routes?page=1&limit=100"),
+  });
+
+  const routeStopsQuery = useQuery({
+    queryKey: ["admin-route-stops"],
+    queryFn: () =>
+      Promise.all(
+        (routesQuery.data?.data ?? []).map((r) =>
+          api.get<BackendRouteStop[]>(`/admin/routes/${r.id}/stops`).catch(() => [] as BackendRouteStop[])
+        )
+      ),
+    enabled: routesQuery.isSuccess && (routesQuery.data?.data.length ?? 0) > 0,
   });
 
   const saveMutation = useMutation({
-    mutationFn: (f: RouteForm) => {
-      const payload = {
-        routeNumber: f.routeNumber,
-        vehicleNumber: f.vehicleNumber,
-        arrivalTime: f.arrivalTime,
-        boardingPoints: f.boardingPoints,
-      };
-      if (f.id) return api.put(`/transport/${f.id}`, payload);
-      return api.post("/transport", payload);
+    mutationFn: async (f: RouteForm) => {
+      if (f.id) {
+        return api.patch(`/admin/routes/${f.id}`, {
+          routeName: f.routeName,
+          description: f.description || undefined,
+        });
+      }
+      return api.post("/admin/routes", {
+        routeCode: f.routeCode,
+        routeName: f.routeName,
+        description: f.description || undefined,
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-routes"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-route-stops"] });
       setDialogOpen(false);
       setForm(EMPTY);
       toast.success("Route saved");
@@ -68,14 +87,14 @@ export default function AdminRoutesPage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not save route"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.del(`/transport/${id}`),
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => api.patch(`/admin/routes/${id}/status`, { status: "INACTIVE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-routes"] });
-      setDeleting(null);
-      toast.success("Route deleted");
+      setDeactivating(null);
+      toast.success("Route deactivated");
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not delete route"),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not deactivate route"),
   });
 
   if (routesQuery.isLoading) return <PageSkeleton rows={6} />;
@@ -83,35 +102,33 @@ export default function AdminRoutesPage() {
     return <PageError message="Could not load routes." onRetry={() => void routesQuery.refetch()} />;
   }
 
-  const routes = routesQuery.data!.items;
+  const routes = routesQuery.data!.data;
+  const stopsByRoute = new Map<string, BackendRouteStop[]>();
+  if (routeStopsQuery.data) {
+    routes.forEach((r, i) => {
+      stopsByRoute.set(r.id, routeStopsQuery.data[i] ?? []);
+    });
+  }
 
   const openCreate = () => {
-    setForm({ ...EMPTY, boardingPoints: [{ name: "", time: "" }] });
+    setForm({ ...EMPTY });
     setDialogOpen(true);
   };
   const openEdit = (r: RouteInfo) => {
     setForm({
       id: r.id,
-      routeNumber: String(r.routeNumber),
-      vehicleNumber: r.vehicleNumber ?? "",
-      arrivalTime: r.arrivalTime ?? "8:05 AM",
-      boardingPoints: (r.boardingPoints ?? []).map((p) => ({ name: p.name, time: p.time })),
+      routeCode: r.routeCode,
+      routeName: r.routeName,
+      description: r.description ?? "",
     });
     setDialogOpen(true);
-  };
-
-  const setStop = (i: number, patch: Partial<StopRow>) => {
-    setForm((f) => ({
-      ...f,
-      boardingPoints: f.boardingPoints.map((s, idx) => (idx === i ? { ...s, ...patch } : s)),
-    }));
   };
 
   return (
     <>
       <PageHeader
         title="Routes"
-        description="Manage bus routes, arrival times and boarding point schedules."
+        description="Manage bus routes, their codes and boarding stops."
         actions={
           <Button className="gap-2 bg-[#1a237e] text-white hover:bg-[#283593]" onClick={openCreate}>
             <Plus className="h-4 w-4" /> Add Route
@@ -134,52 +151,69 @@ export default function AdminRoutesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Arrival</TableHead>
-                    <TableHead>Boarding Points</TableHead>
+                    <TableHead>Route Code</TableHead>
+                    <TableHead>Route Name</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead>Stops</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {routes.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-bold">Route {r.routeNumber}</TableCell>
-                      <TableCell>{r.vehicleNumber || "—"}</TableCell>
-                      <TableCell>{r.arrivalTime ?? "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex max-w-[280px] flex-wrap gap-1">
-                          {(r.boardingPoints ?? []).slice(0, 4).map((p) => (
-                            <Badge key={p.name} variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
-                              <MapPin className="mr-1 h-3 w-3" />
-                              {p.name}
-                            </Badge>
-                          ))}
-                          {(r.boardingPoints ?? []).length > 4 ? (
-                            <Badge variant="outline">+{(r.boardingPoints ?? []).length - 4} more</Badge>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell>{r.stops?.length ?? (r.boardingPoints ?? []).length}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Edit">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setDeleting(r)}
-                            title="Delete"
+                  {routes.map((r) => {
+                    const routeStops = stopsByRoute.get(r.id) ?? [];
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-bold">{r.routeCode}</TableCell>
+                        <TableCell>{r.routeName}</TableCell>
+                        <TableCell className="max-w-[200px] truncate text-muted-foreground">
+                          {r.description || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex max-w-[280px] flex-wrap gap-1">
+                            {routeStops.slice(0, 4).map((rs) => (
+                              <Badge key={rs.id} variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e]">
+                                <MapPin className="mr-1 h-3 w-3" />
+                                {rs.busStop?.name ?? "Stop"}
+                              </Badge>
+                            ))}
+                            {routeStops.length > 4 ? (
+                              <Badge variant="outline">+{routeStops.length - 4} more</Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={r.status === "ACTIVE" ? "default" : "secondary"}
+                            className={r.status === "ACTIVE"
+                              ? "bg-green-100 text-green-800 hover:bg-green-100"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-100"
+                            }
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            {r.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Edit">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {r.status === "ACTIVE" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeactivating(r)}
+                                title="Deactivate"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -190,93 +224,53 @@ export default function AdminRoutesPage() {
       <FormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={form.id ? `Edit Route — ${form.routeNumber}` : "Add Route"}
-        description="Boarding points are listed in the order the bus visits them."
+        title={form.id ? `Edit Route — ${form.routeCode}` : "Add Route"}
+        description="Define route code, name and optional description."
         onSave={() => {
-          if (!form.routeNumber.trim()) {
-            toast.error("Route number is required.");
+          if (!form.routeName.trim()) {
+            toast.error("Route name is required.");
             return;
           }
-          const stops = form.boardingPoints.filter((s) => s.name.trim());
-          if (stops.length === 0) {
-            toast.error("Add at least one boarding point.");
+          if (!form.id && !form.routeCode.trim()) {
+            toast.error("Route code is required.");
             return;
           }
-          saveMutation.mutate({ ...form, boardingPoints: stops });
+          saveMutation.mutate(form);
         }}
         saving={saveMutation.isPending}
         saveLabel="Save Route"
       >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route number *</Label>
-            <Input value={form.routeNumber} onChange={(e) => setForm({ ...form, routeNumber: e.target.value })} inputMode="numeric" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Vehicle number</Label>
-            <Input value={form.vehicleNumber} onChange={(e) => setForm({ ...form, vehicleNumber: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">College arrival</Label>
-            <Input value={form.arrivalTime} onChange={(e) => setForm({ ...form, arrivalTime: e.target.value })} placeholder="8:05 AM" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {!form.id && (
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route code *</Label>
+              <Input value={form.routeCode} onChange={(e) => setForm({ ...form, routeCode: e.target.value })} placeholder="e.g. R001" />
+            </div>
+          )}
+          <div className={`space-y-1.5 ${form.id ? "sm:col-span-2" : ""}`}>
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Route name *</Label>
+            <Input value={form.routeName} onChange={(e) => setForm({ ...form, routeName: e.target.value })} placeholder="e.g. City Center Loop" />
           </div>
         </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Boarding points (in order)
-            </Label>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => setForm((f) => ({ ...f, boardingPoints: [...f.boardingPoints, { name: "", time: "" }] }))}
-            >
-              <Plus className="h-3 w-3" /> Add stop
-            </Button>
-          </div>
-          {form.boardingPoints.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="w-5 text-center text-[11px] font-bold text-muted-foreground">{i + 1}.</span>
-              <Input
-                value={s.name}
-                onChange={(e) => setStop(i, { name: e.target.value })}
-                placeholder="Stop name"
-                className="flex-1"
-              />
-              <Input
-                value={s.time}
-                onChange={(e) => setStop(i, { time: e.target.value })}
-                placeholder="8:15 AM"
-                className="w-28"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                onClick={() => setForm((f) => ({ ...f, boardingPoints: f.boardingPoints.filter((_, idx) => idx !== i) }))}
-                title="Remove stop"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            Stops are saved in the order listed here.
-          </p>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Description</Label>
+          <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional description" />
         </div>
       </FormDialog>
 
-      <DeleteConfirm
-        open={deleting !== null}
-        onOpenChange={(o) => { if (!o) setDeleting(null); }}
-        title="Delete this route?"
-        description={`Route ${deleting?.routeNumber} with ${(deleting?.boardingPoints ?? []).length} boarding points will be removed.`}
-        onConfirm={() => { if (deleting) deleteMutation.mutate(deleting.id); }}
-        deleting={deleteMutation.isPending}
-      />
+      <FormDialog
+        open={deactivating !== null}
+        onOpenChange={(o) => { if (!o) setDeactivating(null); }}
+        title="Deactivate Route"
+        description={`Set "${deactivating?.routeCode} — ${deactivating?.routeName}" to inactive?`}
+        onSave={() => { if (deactivating) deactivateMutation.mutate(deactivating.id); }}
+        saving={deactivateMutation.isPending}
+        saveLabel="Deactivate"
+      >
+        <p className="text-sm text-muted-foreground">
+          This route will be marked as inactive and will no longer appear in active listings.
+        </p>
+      </FormDialog>
     </>
   );
 }

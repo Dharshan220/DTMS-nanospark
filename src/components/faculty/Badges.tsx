@@ -4,11 +4,10 @@ import { BOARDING_LABELS, BOARDING_TONE, BUS_STATUS_TONE } from "@/lib/faculty";
 import type { BoardingStatus, BusDisplayStatus } from "@/types/faculty";
 
 const STATUS_TONE: Record<ComplaintStatus, string> = {
-  pending: "border-amber-200 bg-amber-50 text-amber-700",
-  under_review: "border-sky-200 bg-sky-50 text-sky-700",
-  in_progress: "border-indigo-200 bg-indigo-50 text-indigo-700",
-  resolved: "border-green-200 bg-green-50 text-green-700",
-  escalated: "border-red-200 bg-red-50 text-red-700",
+  OPEN: "border-amber-200 bg-amber-50 text-amber-700",
+  IN_REVIEW: "border-sky-200 bg-sky-50 text-sky-700",
+  RESOLVED: "border-green-200 bg-green-50 text-green-700",
+  REJECTED: "border-red-200 bg-red-50 text-red-700",
 };
 
 export function ComplaintStatusBadge({ status }: { status: ComplaintStatus }) {

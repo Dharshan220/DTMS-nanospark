@@ -11,13 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -25,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { BusInfo, BusPassengerCount } from "@/types/faculty";
+import type { AttendanceRecord, BusInfo, Paginated } from "@/types/faculty";
 
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -34,40 +27,31 @@ function todayKey(): string {
 export default function AdminAttendancePage() {
   const queryClient = useQueryClient();
   const [date, setDate] = useState(todayKey());
-  const [editing, setEditing] = useState<BusPassengerCount | null>(null);
+  const [editing, setEditing] = useState<AttendanceRecord | null>(null);
   const [editBoys, setEditBoys] = useState("0");
   const [editGirls, setEditGirls] = useState("0");
 
   const countsQuery = useQuery({
-    queryKey: ["admin-passenger-counts", date],
-    queryFn: () => api.get<{ items: BusPassengerCount[]; total: number }>(
-        `/attendance/passenger-counts`
+    queryKey: ["admin-attendance", date],
+    queryFn: () =>
+      api.get<Paginated<AttendanceRecord>>(
+        `/admin/attendance?startDate=${encodeURIComponent(date)}&endDate=${encodeURIComponent(date)}&page=1&limit=100`
       ),
   });
   const busesQuery = useQuery({
     queryKey: ["admin-buses"],
-    queryFn: () => api.get<{ items: BusInfo[]; total: number }>("/buses"),
-  });
-  const attendanceQuery = useQuery({
-    queryKey: ["admin-attendance", date],
-    queryFn: () =>
-      api.get<{ items: AttendanceEntry[]; present: number; absent: number; total: number }>(
-        `/attendance?month=${encodeURIComponent(date.slice(0, 7))}`
-      ),
+    queryFn: () => api.get<Paginated<BusInfo>>("/admin/buses?page=1&limit=100"),
   });
 
   const saveMutation = useMutation({
-    mutationFn: (c: BusPassengerCount) =>
-      api.put("/attendance/passenger-counts", {
-        date: c.date,
-        tripType: c.tripType,
-        busId: c.busId,
-        boys: Number(editBoys) || 0,
-        girls: Number(editGirls) || 0,
-        total: (Number(editBoys) || 0) + (Number(editGirls) || 0),
+    mutationFn: (c: AttendanceRecord) =>
+      api.patch(`/admin/attendance/${c.id}`, {
+        boysCount: Number(editBoys) || 0,
+        girlsCount: Number(editGirls) || 0,
+        totalCount: (Number(editBoys) || 0) + (Number(editGirls) || 0),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-passenger-counts"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-attendance"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
       setEditing(null);
       toast.success("Passenger count updated");
@@ -75,42 +59,26 @@ export default function AdminAttendancePage() {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update count"),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: "present" | "absent" }) =>
-      api.put(`/attendance/${id}`, { status }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-attendance"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Could not update status"),
-  });
-
-  if (countsQuery.isLoading || busesQuery.isLoading || attendanceQuery.isLoading) return <PageSkeleton rows={6} />;
-  if (countsQuery.isError || busesQuery.isError || attendanceQuery.isError) {
+  if (countsQuery.isLoading || busesQuery.isLoading) return <PageSkeleton rows={6} />;
+  if (countsQuery.isError || busesQuery.isError) {
     return (
       <PageError
         message="Could not load attendance data."
-        onRetry={() => { void countsQuery.refetch(); void busesQuery.refetch(); void attendanceQuery.refetch(); }}
+        onRetry={() => { void countsQuery.refetch(); void busesQuery.refetch(); }}
       />
     );
   }
 
-  const counts = countsQuery.data!.items.filter((c) => c.date === date);
-  const buses = busesQuery.data!.items;
-  const monthItems = attendanceQuery.data!.items;
-  const dayItems = monthItems.filter((a) => a.date === date);
-  const busName = (busId: string) => {
-    const b = buses.find((x) => x.id === busId);
-    return b ? `Route ${b.routeNumber} · ${b.vehicleNumber}` : "Unknown bus";
-  };
-  const totalToday = counts.reduce((s, c) => s + c.total, 0);
-  const boysToday = counts.reduce((s, c) => s + c.boys, 0);
-  const girlsToday = counts.reduce((s, c) => s + c.girls, 0);
+  const counts = countsQuery.data!.data;
+  const buses = busesQuery.data!.data;
+  const totalToday = counts.reduce((s, c) => s + c.totalCount, 0);
+  const boysToday = counts.reduce((s, c) => s + c.boysCount, 0);
+  const girlsToday = counts.reduce((s, c) => s + c.girlsCount, 0);
 
-  const startEdit = (c: BusPassengerCount) => {
+  const startEdit = (c: AttendanceRecord) => {
     setEditing(c);
-    setEditBoys(String(c.boys));
-    setEditGirls(String(c.girls));
+    setEditBoys(String(c.boysCount));
+    setEditGirls(String(c.girlsCount));
   };
 
   return (
@@ -168,88 +136,19 @@ export default function AdminAttendancePage() {
                 </TableHeader>
                 <TableBody>
                   {counts.map((c) => (
-                    <TableRow key={`${c.busId}-${c.tripType}`}>
-                      <TableCell className="font-bold">{busName(c.busId)}</TableCell>
+                    <TableRow key={c.id}>
+                      <TableCell className="font-bold">Bus {c.bus.busNumber}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="border-[#1a237e]/20 bg-[#1a237e]/5 text-[#1a237e] capitalize">
-                          {c.tripType}
+                          {c.tripType.toLowerCase()}
                         </Badge>
                       </TableCell>
-                      <TableCell>{c.boys}</TableCell>
-                      <TableCell>{c.girls}</TableCell>
-                      <TableCell className="font-extrabold">{c.total}</TableCell>
+                      <TableCell>{c.boysCount}</TableCell>
+                      <TableCell>{c.girlsCount}</TableCell>
+                      <TableCell className="font-extrabold">{c.totalCount}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" onClick={() => startEdit(c)} title="Edit count">
                           <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
-            <ClipboardCheck className="h-4 w-4 text-[#1a237e]" />
-            Student Attendance — {date}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
-              Present: {dayItems.filter((a) => a.status === "present").length}
-            </Badge>
-            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-              Absent: {dayItems.filter((a) => a.status === "absent").length}
-            </Badge>
-          </div>
-          {dayItems.length === 0 ? (
-            <EmptyState message="No attendance records for this date." />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Route</TableHead>
-                    <TableHead>Trip</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Override</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dayItems.slice(0, 50).map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="font-bold">{a.studentName ?? a.studentId}</TableCell>
-                      <TableCell>{a.routeNumber ? `Route ${a.routeNumber}` : "—"}</TableCell>
-                      <TableCell className="capitalize">{a.tripType ?? "—"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            a.status === "present"
-                              ? "border-green-200 bg-green-50 text-green-700"
-                              : "border-red-200 bg-red-50 text-red-700"
-                          }
-                        >
-                          {a.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            statusMutation.mutate({ id: a.id, status: a.status === "present" ? "absent" : "present" })
-                          }
-                          disabled={statusMutation.isPending}
-                        >
-                          Mark {a.status === "present" ? "absent" : "present"}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -267,7 +166,7 @@ export default function AdminAttendancePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm font-extrabold">
                 <ClipboardCheck className="h-4 w-4 text-[#1a237e]" />
-                Edit Count — {busName(editing.busId)} ({editing.tripType})
+                Edit Count — Bus {editing.bus.busNumber} ({editing.tripType.toLowerCase()})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -300,14 +199,4 @@ export default function AdminAttendancePage() {
       ) : null}
     </>
   );
-}
-
-interface AttendanceEntry {
-  id: string;
-  studentId: string;
-  studentName?: string;
-  routeNumber?: number;
-  tripType?: string;
-  status: "present" | "absent";
-  date: string;
 }

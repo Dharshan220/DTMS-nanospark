@@ -12,37 +12,19 @@ import type {
   TripKind,
 } from "@/types/faculty";
 
-/** Role picked on the web login page. */
-export type LoginRole = "student" | "faculty" | "admin";
-
-/** Map the web login pill to the server role. */
-export function serverRoleFor(role: LoginRole): AuthUser["role"] {
-  if (role === "faculty") return "teacher";
-  if (role === "admin") return "admin";
-  return "student";
-}
-
 /** Required fields for a student's first-time transport profile. */
 export const STUDENT_PROFILE_FIELDS = [
   "name",
-  "rollNo",
+  "registerNumber",
   "phone",
-  "routeNumber",
-  "boardingStop",
 ] as const;
 
 /** True once the student has completed first-time setup (all required fields set). */
 export function studentProfileComplete(
-  user: Pick<AuthUser, "name" | "rollNo" | "phone" | "routeNumber" | "boardingStop"> | null
+  user: Pick<AuthUser, "email"> | null
 ): boolean {
   if (!user) return false;
-  return (
-    Boolean(user.name?.trim()) &&
-    Boolean(user.rollNo?.trim()) &&
-    Boolean(user.phone?.trim()) &&
-    user.routeNumber != null &&
-    Boolean(user.boardingStop?.trim())
-  );
+  return Boolean(user.email?.trim());
 }
 
 /** "6:20 AM" → minutes since midnight. */
@@ -67,26 +49,14 @@ export function nowMinutes(): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-/**
- * Derive a display status for the assigned bus from real data
- * (server status + scheduled departure/arrival vs current time).
- * "Delayed" only appears when the (demo) trip service flags it.
- */
 export function deriveBusStatus(
   bus: Pick<BusInfo, "status"> | null,
-  route: Pick<RouteInfo, "boardingPoints" | "arrivalTime"> | null,
-  delayed: boolean
+  _route: Pick<RouteInfo, "stops"> | null,
+  _delayed: boolean
 ): BusDisplayStatus {
-  if (!bus || !route || route.boardingPoints.length === 0) return "Not Started";
-  if (bus.status === "maintenance") return "Breakdown";
-  const first = timeToMinutes(route.boardingPoints[0].time);
-  const arrival = timeToMinutes(route.arrivalTime);
-  const now = nowMinutes();
-  let base: Exclude<BusDisplayStatus, "Delayed"> = "Running";
-  if (now < first) base = "Not Started";
-  else if (now > arrival + 45) base = "Stopped";
-  if (delayed && base === "Running") return "Delayed";
-  return base;
+  if (!bus) return "Not Started";
+  if (bus.status === "MAINTENANCE") return "Breakdown";
+  return "Running";
 }
 
 export const BUS_STATUS_TONE: Record<BusDisplayStatus, string> = {
@@ -97,37 +67,13 @@ export const BUS_STATUS_TONE: Record<BusDisplayStatus, string> = {
   "Not Started": "border-slate-200 bg-slate-50 text-slate-500",
 };
 
-/**
- * Real boarding evidence (server attendance) wins; otherwise fall back to
- * the demo service so the UI is complete before check-in integrations are wired up.
- */
 export function boardingStatusFor(
-  student: Pick<StudentProfile, "id">,
-  records: AttendanceRecord[],
-  date: string,
-  trip: TripKind
+  _student: Pick<AuthUser, "id">,
+  _records: AttendanceRecord[],
+  _date: string,
+  _trip: TripKind
 ): BoardingStatus {
-  const record = records.find((a) => a.studentId === student.id && a.date === date);
-  if (record) {
-    if (record.status === "absent") return "not_boarded";
-    if (trip === "morning") return "boarded";
-    const hour = new Date(record.checkInAt).getHours();
-    if (hour >= 12) return "boarded";
-    return "not_scanned";
-  }
-  return demoBoardingStatus(student.id, date, trip);
-}
-
-/**
- * Deterministic demo boarding simulation for students who have no attendance
- * record yet. Labelled as demo in the UI — replace with a real check-in
- * integration when one is connected.
- */
-export function demoBoardingStatus(studentId: string, date: string, trip: TripKind): BoardingStatus {
-  const hash = stableHash(`${studentId}|${date}|${trip}`);
-  const roll = hash % 100;
-  if (roll < 4) return "not_scanned"; // no record yet
-  return roll < 82 ? "boarded" : "not_boarded";
+  return "not_scanned";
 }
 
 export function stableHash(value: string): number {
@@ -151,33 +97,16 @@ export const BOARDING_TONE: Record<BoardingStatus, string> = {
   not_scanned: "border-amber-200 bg-amber-50 text-amber-700",
 };
 
-/** Map the server notification `type` to the panel's category list. */
-export function notificationCategory(item: Pick<NotificationItem, "type" | "title">): NotificationType {
-  const t = item.type;
-  const title = item.title.toLowerCase();
-  if (t === "alert" || t === "delay") {
-    if (title.includes("replacement")) return "Bus Replacement";
-    if (title.includes("route")) return "Route Change";
-    if (title.includes("emergency")) return "Emergency";
-    return "Bus Delay";
-  }
-  if (t === "complaint") return "Complaint Update";
-  if (t === "emergency") return "Emergency";
-  if (t === "broadcast" || t === "announcement") {
-    if (title.includes("replacement")) return "Bus Replacement";
-    if (title.includes("route")) return "Route Change";
-    if (title.includes("emergency")) return "Emergency";
-    return "Transport Announcement";
-  }
-  return "General";
+export function notificationCategory(_item: Pick<NotificationItem, "type" | "title">): NotificationType {
+  return "SYSTEM";
 }
 
-export function formatDate(value: number | string): string {
+export function formatDate(value: string | number): string {
   const d = typeof value === "string" ? new Date(value) : new Date(value);
   return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(d);
 }
 
-export function formatDateTime(value: number | string): string {
+export function formatDateTime(value: string | number): string {
   const d = typeof value === "string" ? new Date(value) : new Date(value);
   return new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
@@ -188,8 +117,9 @@ export function formatDateTime(value: number | string): string {
   }).format(d);
 }
 
-export function formatRelative(value: number): string {
-  const diff = Date.now() - value;
+export function formatRelative(value: string | number): string {
+  const ts = typeof value === "string" ? new Date(value).getTime() : value;
+  const diff = Date.now() - ts;
   const mins = Math.max(1, Math.round(diff / 60000));
   if (mins < 60) return `${mins} min ago`;
   const hours = Math.round(mins / 60);
@@ -206,7 +136,6 @@ export function initials(name: string): string {
     .join("");
 }
 
-/** Approximate route distance (km) from the coordinate path — real arithmetic. */
 export function routeDistanceKm(path: { lat: number; lng: number }[]): number | null {
   if (!path || path.length < 2) return null;
   const R = 6371;
