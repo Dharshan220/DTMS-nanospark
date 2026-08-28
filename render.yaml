@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: dtms-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+      - key: ADMIN_EMAIL
+        value: admin@dtms.local
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: WHATSAPP_ENABLED
+        value: "false"
+    healthCheckPath: /api/health
+    autoDeploy: true
