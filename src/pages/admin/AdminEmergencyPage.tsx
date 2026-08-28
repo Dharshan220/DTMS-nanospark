@@ -32,7 +32,7 @@ export default function AdminEmergencyPage() {
 
   const query = useQuery({
     queryKey: ["admin-emergencies"],
-    queryFn: () => api.get<Paginated<EmergencyReport>>("/admin/emergency", { params: { page: 1, limit: 100 } }),
+    queryFn: () => api.get<Paginated<EmergencyReport>>("/admin/emergency?page=1&limit=100"),
     refetchInterval: 20000,
   });
 

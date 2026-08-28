@@ -55,31 +55,29 @@ export default function AdminReportsPage() {
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const dateParams = { from: dateFrom, to: dateTo };
-
   const dashboardQuery = useQuery({
     queryKey: ["admin-analytics-dashboard"],
     queryFn: () => api.get<AnalyticsDashboard>("/admin/analytics/dashboard"),
   });
   const complaintsQuery = useQuery({
     queryKey: ["admin-analytics-complaints", dateFrom, dateTo],
-    queryFn: () => api.get<ComplaintAnalytics>("/admin/analytics/complaints", { params: dateParams }),
+    queryFn: () => api.get<ComplaintAnalytics>(`/admin/analytics/complaints?from=${dateFrom}&to=${dateTo}`),
   });
   const complaintsDailyQuery = useQuery({
     queryKey: ["admin-analytics-complaints-daily", dateFrom, dateTo],
-    queryFn: () => api.get<{ date: string; total: number; resolved: number; open: number }[]>("/admin/analytics/complaints/daily", { params: dateParams }),
+    queryFn: () => api.get<{ date: string; total: number; resolved: number; open: number }[]>(`/admin/analytics/complaints/daily?from=${dateFrom}&to=${dateTo}`),
   });
   const feedbackQuery = useQuery({
     queryKey: ["admin-analytics-feedback", dateFrom, dateTo],
-    queryFn: () => api.get<FeedbackAnalytics>("/admin/analytics/feedback", { params: dateParams }),
+    queryFn: () => api.get<FeedbackAnalytics>(`/admin/analytics/feedback?from=${dateFrom}&to=${dateTo}`),
   });
   const attendanceDailyQuery = useQuery({
     queryKey: ["admin-analytics-attendance-daily", dateFrom, dateTo],
-    queryFn: () => api.get<DailyAttendance[]>("/admin/analytics/attendance/daily", { params: dateParams }),
+    queryFn: () => api.get<DailyAttendance[]>(`/admin/analytics/attendance/daily?from=${dateFrom}&to=${dateTo}`),
   });
   const attendanceSummaryQuery = useQuery({
     queryKey: ["admin-analytics-attendance-summary", dateFrom, dateTo],
-    queryFn: () => api.get<{ dateRange: { from: string; to: string }; totalRecords: number; totalPassengers: number; totalBoys: number; totalGirls: number; averagePassengers: number | null }>("/admin/analytics/attendance", { params: dateParams }),
+    queryFn: () => api.get<{ dateRange: { from: string; to: string }; totalRecords: number; totalPassengers: number; totalBoys: number; totalGirls: number; averagePassengers: number | null }>(`/admin/analytics/attendance?from=${dateFrom}&to=${dateTo}`),
   });
 
   const isLoading = dashboardQuery.isLoading || complaintsQuery.isLoading || complaintsDailyQuery.isLoading || feedbackQuery.isLoading || attendanceDailyQuery.isLoading || attendanceSummaryQuery.isLoading;

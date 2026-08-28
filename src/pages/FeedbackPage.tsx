@@ -3,6 +3,7 @@ import { MessageSquare, Send, CheckCircle, Sparkles, Image as ImageIcon } from "
 import { motion, AnimatePresence } from "framer-motion";
 import { busRoutes } from "@/data/routes";
 import collegeEntranceImg from "@/assets/college_entrance_hero.jpg";
+import { api } from "@/lib/api";
 
 const categories = ["General", "Issue / Complaint", "Driver Behavior", "Timing", "Safety", "Suggestion"];
 
@@ -79,7 +80,6 @@ export default function FeedbackPage() {
     setSubmitError("");
 
     try {
-      const { api } = await import("@/lib/api");
       await api.post("/student/feedback", {
         subject: `${category} - ${department}`,
         message: description.trim(),
