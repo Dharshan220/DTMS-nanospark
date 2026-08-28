@@ -5,7 +5,7 @@ import path from "path";
 // DACE Transport - Maintained and hosted by Nano Spark Team
 // Made by Shanvas and team with the help of Antigravity
 export default defineConfig({
-  base: process.env.VERCEL ? "/" : "/resum/",
+  base: "/",
   server: {
     host: "::",
     port: 8080,

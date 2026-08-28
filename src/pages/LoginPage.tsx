@@ -13,11 +13,13 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin Login",
 };
 
-const DEMO_CREDS: Record<string, string> = {
-  faculty: "teacher@dtms.in / teacher123",
-  admin: "admin@dtms.in / admin123",
-  student: "student@dtms.in / student123",
-};
+const DEMO_CREDS: Record<string, string> | null = import.meta.env.DEV
+  ? {
+      faculty: "teacher@dtms.in / teacher123",
+      admin: "admin@dtms.in / admin123",
+      student: "student@dtms.in / student123",
+    }
+  : null;
 
 export default function LoginPage() {
   const [role, setRole] = useState<string>("student");

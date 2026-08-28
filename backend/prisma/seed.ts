@@ -422,10 +422,13 @@ async function main() {
   }
 
   console.log('\nDevelopment seed completed successfully!\n');
-  console.log('Login credentials:');
-  console.log(`  Admin:   ${adminEmail} / ${adminPassword}`);
-  console.log('  Faculty: rani.faculty@dtms.local / TestPass123');
-  console.log('  Student: arjun.student@dtms.local / TestPass123\n');
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('Login credentials:');
+    console.log(`  Admin:   ${adminEmail} / ${adminPassword}`);
+    console.log('  Faculty: rani.faculty@dtms.local / TestPass123');
+    console.log('  Student: arjun.student@dtms.local / TestPass123\n');
+  }
 }
 
 main()
