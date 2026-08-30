@@ -8,6 +8,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { RoutesService } from './routes.service';
 import { CreateRouteDto, UpdateRouteDto, UpdateRouteStatusDto } from './dto/route.dto';
@@ -25,8 +26,10 @@ export class RoutesController {
   constructor(private readonly routesService: RoutesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new route', description: 'Registers a new route in the system (admin only).' })
+  @ApiOperation({ summary: 'Create a new route', description: 'Registers a new route in the system. Admin only.' })
+  @ApiBody({ type: CreateRouteDto })
   @ApiResponse({ status: 201, description: 'Route created successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   create(@Body() dto: CreateRouteDto) {
     return this.routesService.create(dto);
   }
@@ -54,17 +57,21 @@ export class RoutesController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a route', description: 'Updates route details by ID.' })
+  @ApiOperation({ summary: 'Update a route', description: 'Updates route details by ID. Admin only.' })
   @ApiParam({ name: 'id', description: 'Route ID' })
+  @ApiBody({ type: UpdateRouteDto })
   @ApiResponse({ status: 200, description: 'Route updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   update(@Param('id') id: string, @Body() dto: UpdateRouteDto) {
     return this.routesService.update(id, dto);
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update route status', description: 'Changes the status of a route.' })
+  @ApiOperation({ summary: 'Update route status', description: 'Changes the status of a route. Admin only.' })
   @ApiParam({ name: 'id', description: 'Route ID' })
+  @ApiBody({ type: UpdateRouteStatusDto })
   @ApiResponse({ status: 200, description: 'Route status updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateRouteStatusDto) {
     return this.routesService.updateStatus(id, dto.status as EntityStatus);
   }

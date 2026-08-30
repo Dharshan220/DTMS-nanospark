@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
 import { SchedulesService } from './schedules.service';
 import {
   CreateScheduleDto,
@@ -33,8 +33,10 @@ export class SchedulesController {
 
   @Post('admin/schedules')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create a new schedule' })
+  @ApiOperation({ summary: 'Create a new schedule', description: 'Creates a transport schedule. Admin only.' })
+  @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: 201, description: 'Schedule created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   createSchedule(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateScheduleDto,
@@ -61,9 +63,11 @@ export class SchedulesController {
 
   @Patch('admin/schedules/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update a schedule' })
+  @ApiOperation({ summary: 'Update a schedule', description: 'Updates an existing schedule. Admin only.' })
   @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiBody({ type: UpdateScheduleDto })
   @ApiResponse({ status: 200, description: 'Schedule updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateSchedule(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -106,9 +110,11 @@ export class SchedulesController {
 
   @Post('admin/schedules/:id/overrides')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create a schedule override' })
+  @ApiOperation({ summary: 'Create a schedule override', description: 'Creates an override for an existing schedule. Admin only.' })
   @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiBody({ type: CreateOverrideDto })
   @ApiResponse({ status: 201, description: 'Override created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   createOverride(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,

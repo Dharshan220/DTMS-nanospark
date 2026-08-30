@@ -4,21 +4,47 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import * as os from 'os';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+
+  const clusterMode = process.env.CLUSTER === 'true';
+  const numCPUs = os.cpus().length;
+
+  if (clusterMode && numCPUs > 1) {
+    const cluster = await import('cluster');
+    const primary = cluster.default;
+
+    if (primary.isPrimary) {
+      logger.log(`Primary ${process.pid} starting ${numCPUs} workers`);
+
+      for (let i = 0; i < numCPUs; i++) {
+        primary.fork();
+      }
+
+      primary.on('exit', (worker) => {
+        logger.warn(`Worker ${worker.process.pid} died — restarting`);
+        primary.fork();
+      });
+    } else {
+      await startServer(logger);
+    }
+  } else {
+    await startServer(logger);
+  }
+}
+
+async function startServer(logger: Logger) {
   const app = await NestFactory.create(AppModule, {
     snapshot: true,
   });
   const configService = app.get(ConfigService);
 
-  // Global exception filter — sanitizes errors in production
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Global API prefix
   app.setGlobalPrefix('api');
 
-  // CORS — production-safe
   const frontendUrl = configService.get<string>('FRONTEND_URL') || 'http://localhost:8080';
   app.enableCors({
     origin: frontendUrl,
@@ -26,7 +52,6 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Validation pipe — reject unknown fields in production
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -36,42 +61,116 @@ async function bootstrap() {
     }),
   );
 
-  // Security headers via Helmet
   try {
     const helmet = (await import('helmet')).default;
     app.use(helmet({
-      contentSecurityPolicy: false, // API-only, no inline scripts
+      contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
     }));
   } catch {
     logger.warn('Helmet not available — skipping security headers');
   }
 
-  // Request body size limit (100kb — sufficient for all DTMS payloads)
   app.use(require('express').json({ limit: '100kb' }));
   app.use(require('express').urlencoded({ extended: true, limit: '100kb' }));
 
+  const expressApp = app.getHttpServer();
+  expressApp.timeout = 30000;
+  expressApp.keepAliveTimeout = 65000;
+  expressApp.headersTimeout = 35000;
+
   const port = configService.get<number>('PORT') || 5000;
 
-  // Swagger / OpenAPI documentation (skip in production)
   if (process.env.NODE_ENV !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('DTMS — Digital Transport Management System API')
       .setDescription(
         'Backend API for the College Digital Transport Management System.\n\n' +
-        '## Authentication\n' +
-        'Most endpoints require a JWT Bearer token. Login via `POST /api/auth/login` to obtain an access token.\n\n' +
-        '## Roles\n' +
-        '- **ADMIN** — Full system access (students, faculty, buses, drivers, routes, schedules, analytics, audit logs)\n' +
-        '- **FACULTY** — Profile, transport assignment, attendance management, emergency alerts\n' +
-        '- **STUDENT** — Profile, transport assignment, complaints, feedback, emergency alerts\n\n' +
-        '## Pagination\n' +
-        'List endpoints support `page` (default 1) and `limit` (default 20, max 100) query parameters.\n\n' +
-        '## Common Response Format\n' +
-        'Paginated endpoints return:\n' +
+        '---\n\n' +
+        '## Getting Started — How to Authenticate\n\n' +
+        'This API uses **JWT Bearer Token** authentication. Follow these steps to test protected endpoints:\n\n' +
+        '### Step 1 — Login\n' +
+        'Call the login endpoint to obtain an access token:\n\n' +
+        '```http\n' +
+        'POST /api/auth/login\n' +
+        'Content-Type: application/json\n\n' +
+        '{\n' +
+        '  "email": "your-email@example.com",\n' +
+        '  "password": "your-password"\n' +
+        '}\n' +
+        '```\n\n' +
+        '**Valid credentials by role:**\n' +
+        '- **Admin** — Use an admin account email and password\n' +
+        '- **Student** — Use a student account email and password\n' +
+        '- **Faculty** — Use a faculty account email and password\n\n' +
+        '### Step 2 — Copy the Access Token\n' +
+        'The login response includes an `accessToken` field:\n\n' +
         '```json\n' +
-        '{ "data": [], "pagination": { "page": 1, "limit": 20, "total": 100, "totalPages": 5 } }\n' +
-        '```',
+        '{\n' +
+        '  "user": {\n' +
+        '    "id": "clx1234567890abcdef",\n' +
+        '    "email": "admin@example.com",\n' +
+        '    "role": "ADMIN",\n' +
+        '    "status": "ACTIVE"\n' +
+        '  },\n' +
+        '  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."\n' +
+        '}\n' +
+        '```\n\n' +
+        '### Step 3 — Authorize in Swagger\n' +
+        '1. Click the **Authorize** button at the top of this page\n' +
+        '2. Paste the `accessToken` value (without the `Bearer ` prefix — it is added automatically)\n' +
+        '3. Click **Authorize** and then **Close**\n\n' +
+        '### Step 4 — Call Protected Endpoints\n' +
+        'All endpoints marked with a 🔒 lock icon now include the `Authorization: Bearer <token>` header automatically.\n\n' +
+        '---\n\n' +
+        '## Roles & Access Control\n\n' +
+        '| Role | Access |\n' +
+        '|------|--------|\n' +
+        '| **ADMIN** | Students, Faculty, Buses, Drivers, Routes, Stops, Schedules, Attendance, Complaints, Feedback, Emergency, Notifications, Analytics, Audit Logs |\n' +
+        '| **FACULTY** | Profile, Transport Assignment, Attendance, Schedules, Emergency, Notifications |\n' +
+        '| **STUDENT** | Profile, Transport Assignment, Complaints, Feedback, Schedules, Emergency, Notifications |\n\n' +
+        'Endpoints are prefixed by role:\n' +
+        '- `/api/admin/*` — Requires **ADMIN** role\n' +
+        '- `/api/student/*` — Requires **STUDENT** role\n' +
+        '- `/api/faculty/*` — Requires **FACULTY** role\n' +
+        '- `/api/emergency/*` — Requires **STUDENT** or **FACULTY** role (admin endpoints under `/api/admin/emergency`)\n\n' +
+        '### Public Endpoints (No Authentication Required)\n' +
+        '- `POST /api/auth/login` — User login\n' +
+        '- `POST /api/auth/refresh` — Refresh access token (uses httpOnly cookie)\n' +
+        '- `GET /api/health` — Health check\n' +
+        '- `GET /api/health/ready` — Readiness check\n' +
+        '- `GET /api/webhooks/whatsapp` — WhatsApp webhook verification\n' +
+        '- `POST /api/webhooks/whatsapp` — WhatsApp webhook receiver\n\n' +
+        '---\n\n' +
+        '## Token Refresh\n\n' +
+        'The refresh endpoint (`POST /api/auth/refresh`) uses an **httpOnly cookie** (`refresh_token`).\n' +
+        'The refresh token is never exposed in the response body or Swagger examples.\n' +
+        'Access tokens expire after 15 minutes (configurable via `JWT_ACCESS_EXPIRY`).\n\n' +
+        '---\n\n' +
+        '## Pagination\n\n' +
+        'List endpoints support `page` (default 1) and `limit` (default 20, max 100) query parameters.\n\n' +
+        'Paginated response format:\n' +
+        '```json\n' +
+        '{\n' +
+        '  "data": [],\n' +
+        '  "pagination": {\n' +
+        '    "page": 1,\n' +
+        '    "limit": 20,\n' +
+        '    "total": 100,\n' +
+        '    "totalPages": 5\n' +
+        '  }\n' +
+        '}\n' +
+        '```\n\n' +
+        '---\n\n' +
+        '## Common Error Responses\n\n' +
+        '| Status | Meaning | Description |\n' +
+        '|--------|---------|-------------|\n' +
+        '| `400` | Bad Request | Invalid input data or validation error |\n' +
+        '| `401` | Unauthorized | Missing or invalid JWT token, or invalid credentials |\n' +
+        '| `403` | Forbidden | Authenticated but insufficient role permissions |\n' +
+        '| `404` | Not Found | Resource does not exist |\n' +
+        '| `409` | Conflict | Resource already exists (e.g., duplicate email) |\n' +
+        '| `429` | Too Many Requests | Rate limit exceeded (login: 10/min) |',
       )
       .setVersion('1.0.0')
       .setContact('DTMS Team', '', '')
@@ -118,7 +217,7 @@ async function bootstrap() {
 
   await app.listen(port);
 
-  logger.log(`DTMS Backend running on http://localhost:${port}`);
+  logger.log(`DTMS Backend running on http://localhost:${port} (PID: ${process.pid})`);
   logger.log(`Health check: http://localhost:${port}/api/health`);
   logger.log(`Frontend URL: ${frontendUrl}`);
 }

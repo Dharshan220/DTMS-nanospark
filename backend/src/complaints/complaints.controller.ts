@@ -10,7 +10,7 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { ComplaintsService } from './complaints.service';
 import { CreateComplaintDto, UpdateComplaintDto } from './dto/complaints.dto';
@@ -33,8 +33,10 @@ export class ComplaintsController {
   @Roles(Role.STUDENT)
   @UseInterceptors(ClassSerializerInterceptor)
   @UseGuards(ThrottlerGuard)
-  @ApiOperation({ summary: 'Create a student complaint' })
+  @ApiOperation({ summary: 'Create a student complaint', description: 'Submit a new complaint. Student only. Rate limited.' })
+  @ApiBody({ type: CreateComplaintDto })
   @ApiResponse({ status: 201, description: 'Complaint created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: student access required' })
   createStudentComplaint(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateComplaintDto,
@@ -127,9 +129,11 @@ export class ComplaintsController {
 
   @Patch('admin/complaints/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update a complaint' })
+  @ApiOperation({ summary: 'Update a complaint', description: 'Update complaint status/details. Admin only.' })
   @ApiParam({ name: 'id', description: 'Complaint ID' })
+  @ApiBody({ type: UpdateComplaintDto })
   @ApiResponse({ status: 200, description: 'Complaint updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateAdminComplaint(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,

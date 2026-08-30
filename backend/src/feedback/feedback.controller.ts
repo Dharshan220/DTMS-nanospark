@@ -10,7 +10,7 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto, UpdateFeedbackDto } from './dto/feedback.dto';
@@ -33,8 +33,10 @@ export class FeedbackController {
   @Roles(Role.STUDENT)
   @UseInterceptors(ClassSerializerInterceptor)
   @UseGuards(ThrottlerGuard)
-  @ApiOperation({ summary: 'Create student feedback' })
+  @ApiOperation({ summary: 'Create student feedback', description: 'Submit new feedback. Student only. Rate limited.' })
+  @ApiBody({ type: CreateFeedbackDto })
   @ApiResponse({ status: 201, description: 'Feedback created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: student access required' })
   createStudentFeedback(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateFeedbackDto,
@@ -121,9 +123,11 @@ export class FeedbackController {
 
   @Patch('admin/feedback/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update feedback status' })
+  @ApiOperation({ summary: 'Update feedback status', description: 'Update feedback status/details. Admin only.' })
   @ApiParam({ name: 'id', description: 'Feedback ID' })
+  @ApiBody({ type: UpdateFeedbackDto })
   @ApiResponse({ status: 200, description: 'Feedback updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateAdminFeedback(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,

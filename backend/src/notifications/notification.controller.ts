@@ -11,7 +11,7 @@ import {
   Res,
   HttpCode,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { NotificationService } from './notification.service';
 import { TransportEventService } from './transport-event.service';
@@ -118,8 +118,10 @@ export class NotificationController {
 
   @Post('admin/notifications/announcement')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Create a transport announcement' })
+  @ApiOperation({ summary: 'Create a transport announcement', description: 'Send announcement to students/faculty. Admin only.' })
+  @ApiBody({ type: CreateAnnouncementDto })
   @ApiResponse({ status: 201, description: 'Announcement created successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   createAnnouncement(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateAnnouncementDto,
@@ -140,8 +142,18 @@ export class NotificationController {
 
   @Post('admin/notifications/whatsapp/test')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Send a test WhatsApp notification' })
+  @ApiOperation({ summary: 'Send a test WhatsApp notification', description: 'Send a test message to verify WhatsApp integration. Admin only.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        phoneNumber: { type: 'string', description: 'Phone number to send test message to', example: '+1234567890' },
+      },
+      required: ['phoneNumber'],
+    },
+  })
   @ApiResponse({ status: 200, description: 'Test notification sent' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   async testWhatsApp(
     @Body('phoneNumber') phoneNumber: string,
   ) {

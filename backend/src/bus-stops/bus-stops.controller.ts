@@ -8,6 +8,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { BusStopsService } from './bus-stops.service';
 import { CreateBusStopDto, UpdateBusStopDto, UpdateBusStopStatusDto } from './dto/bus-stop.dto';
@@ -25,8 +26,10 @@ export class BusStopsController {
   constructor(private readonly busStopsService: BusStopsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new bus stop', description: 'Registers a new bus stop in the system (admin only).' })
+  @ApiOperation({ summary: 'Create a new bus stop', description: 'Registers a new bus stop in the system. Admin only.' })
+  @ApiBody({ type: CreateBusStopDto })
   @ApiResponse({ status: 201, description: 'Bus stop created successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   create(@Body() dto: CreateBusStopDto) {
     return this.busStopsService.create(dto);
   }
@@ -54,17 +57,21 @@ export class BusStopsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a bus stop', description: 'Updates bus stop details by ID.' })
+  @ApiOperation({ summary: 'Update a bus stop', description: 'Updates bus stop details by ID. Admin only.' })
   @ApiParam({ name: 'id', description: 'Bus stop ID' })
+  @ApiBody({ type: UpdateBusStopDto })
   @ApiResponse({ status: 200, description: 'Bus stop updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   update(@Param('id') id: string, @Body() dto: UpdateBusStopDto) {
     return this.busStopsService.update(id, dto);
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update bus stop status', description: 'Changes the status of a bus stop.' })
+  @ApiOperation({ summary: 'Update bus stop status', description: 'Changes the status of a bus stop. Admin only.' })
   @ApiParam({ name: 'id', description: 'Bus stop ID' })
+  @ApiBody({ type: UpdateBusStopStatusDto })
   @ApiResponse({ status: 200, description: 'Bus stop status updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateBusStopStatusDto) {
     return this.busStopsService.updateStatus(id, dto.status as EntityStatus);
   }

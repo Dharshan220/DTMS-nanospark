@@ -10,7 +10,7 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EmergencyService } from './emergency.service';
 import {
@@ -36,8 +36,10 @@ export class EmergencyController {
   @Roles(Role.STUDENT, Role.FACULTY)
   @UseInterceptors(ClassSerializerInterceptor)
   @UseGuards(ThrottlerGuard)
-  @ApiOperation({ summary: 'Create an emergency SOS alert' })
+  @ApiOperation({ summary: 'Create an emergency SOS alert', description: 'Send an SOS alert. Student or Faculty only. Rate limited.' })
+  @ApiBody({ type: CreateEmergencyDto })
   @ApiResponse({ status: 201, description: 'Emergency alert created' })
+  @ApiResponse({ status: 403, description: 'Forbidden: student or faculty access required' })
   createEmergency(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateEmergencyDto,
@@ -158,9 +160,11 @@ export class EmergencyController {
 
   @Patch('admin/emergency/:id/resolve')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Resolve an emergency alert' })
+  @ApiOperation({ summary: 'Resolve an emergency alert', description: 'Mark an emergency as resolved. Admin only.' })
   @ApiParam({ name: 'id', description: 'Emergency ID' })
+  @ApiBody({ type: ResolveEmergencyDto })
   @ApiResponse({ status: 200, description: 'Emergency resolved' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   resolveEmergency(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,

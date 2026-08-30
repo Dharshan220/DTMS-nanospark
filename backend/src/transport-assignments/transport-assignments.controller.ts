@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody } from '@nestjs/swagger';
 import { TransportAssignmentsService } from './transport-assignments.service';
 import {
   AssignStudentBusDto, UpdateStudentAssignmentDto,
@@ -25,9 +25,11 @@ export class TransportAssignmentsController {
 
   @Patch('admin/buses/:busId/route')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Assign a route to a bus' })
+  @ApiOperation({ summary: 'Assign a route to a bus', description: 'Assign or update a route assignment for a bus. Admin only.' })
   @ApiParam({ name: 'busId', description: 'Bus ID' })
+  @ApiBody({ type: AssignBusRouteDto })
   @ApiResponse({ status: 200, description: 'Route assigned to bus successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   assignBusRoute(@Param('busId') busId: string, @Body() dto: AssignBusRouteDto) {
     return this.assignmentsService.assignBusRoute(busId, dto);
   }
@@ -45,18 +47,22 @@ export class TransportAssignmentsController {
 
   @Post('admin/students/:studentId/transport')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Assign bus to student' })
+  @ApiOperation({ summary: 'Assign bus to student', description: 'Create a transport assignment for a student. Admin only.' })
   @ApiParam({ name: 'studentId', description: 'Student ID' })
+  @ApiBody({ type: AssignStudentBusDto })
   @ApiResponse({ status: 201, description: 'Bus assigned to student successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   assignStudentTransport(@Param('studentId') studentId: string, @Body() dto: AssignStudentBusDto) {
     return this.assignmentsService.assignStudentBus(studentId, dto);
   }
 
   @Patch('admin/students/:studentId/transport')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update student transport assignment' })
+  @ApiOperation({ summary: 'Update student transport assignment', description: 'Update an existing transport assignment. Admin only.' })
   @ApiParam({ name: 'studentId', description: 'Student ID' })
+  @ApiBody({ type: AssignStudentBusDto })
   @ApiResponse({ status: 200, description: 'Student transport assignment updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateStudentTransport(
     @Param('studentId') studentId: string,
     @Body() dto: AssignStudentBusDto,
@@ -96,18 +102,22 @@ export class TransportAssignmentsController {
 
   @Post('admin/faculty/:facultyId/transport')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Assign bus to faculty' })
+  @ApiOperation({ summary: 'Assign bus to faculty', description: 'Create a transport assignment for a faculty member. Admin only.' })
   @ApiParam({ name: 'facultyId', description: 'Faculty ID' })
+  @ApiBody({ type: AssignFacultyBusDto })
   @ApiResponse({ status: 201, description: 'Bus assigned to faculty successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   assignFacultyTransport(@Param('facultyId') facultyId: string, @Body() dto: AssignFacultyBusDto) {
     return this.assignmentsService.assignFacultyBus(facultyId, dto);
   }
 
   @Patch('admin/faculty/:facultyId/transport')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update faculty transport assignment' })
+  @ApiOperation({ summary: 'Update faculty transport assignment', description: 'Update an existing faculty transport assignment. Admin only.' })
   @ApiParam({ name: 'facultyId', description: 'Faculty ID' })
+  @ApiBody({ type: AssignFacultyBusDto })
   @ApiResponse({ status: 200, description: 'Faculty transport assignment updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateFacultyTransport(
     @Param('facultyId') facultyId: string,
     @Body() dto: AssignFacultyBusDto,

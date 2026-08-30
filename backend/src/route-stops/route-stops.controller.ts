@@ -7,6 +7,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { RouteStopsService } from './route-stops.service';
 import { AddStopToRouteDto, UpdateRouteStopDto, ReorderStopsDto } from './dto/route-stop.dto';
@@ -32,18 +33,22 @@ export class RouteStopsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Add a stop to a route', description: 'Adds a bus stop to the specified route.' })
+  @ApiOperation({ summary: 'Add a stop to a route', description: 'Adds a bus stop to the specified route. Admin only.' })
   @ApiParam({ name: 'routeId', description: 'Route ID' })
+  @ApiBody({ type: AddStopToRouteDto })
   @ApiResponse({ status: 201, description: 'Stop added to route successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   addStop(@Param('routeId') routeId: string, @Body() dto: AddStopToRouteDto) {
     return this.routeStopsService.addStopToRoute(routeId, dto);
   }
 
   @Patch(':routeStopId')
-  @ApiOperation({ summary: 'Update a route stop', description: 'Updates details of a specific stop within a route.' })
+  @ApiOperation({ summary: 'Update a route stop', description: 'Updates details of a specific stop within a route. Admin only.' })
   @ApiParam({ name: 'routeId', description: 'Route ID' })
   @ApiParam({ name: 'routeStopId', description: 'Route stop ID' })
+  @ApiBody({ type: UpdateRouteStopDto })
   @ApiResponse({ status: 200, description: 'Route stop updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateRouteStop(
     @Param('routeId') routeId: string,
     @Param('routeStopId') routeStopId: string,
@@ -62,9 +67,11 @@ export class RouteStopsController {
   }
 
   @Patch('reorder/all')
-  @ApiOperation({ summary: 'Reorder stops on a route', description: 'Reorders all stops for a route based on the provided ID list.' })
+  @ApiOperation({ summary: 'Reorder stops on a route', description: 'Reorders all stops for a route based on the provided ID list. Admin only.' })
   @ApiParam({ name: 'routeId', description: 'Route ID' })
+  @ApiBody({ type: ReorderStopsDto })
   @ApiResponse({ status: 200, description: 'Stops reordered successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   reorderStops(@Param('routeId') routeId: string, @Body() dto: ReorderStopsDto) {
     return this.routeStopsService.reorderStops(routeId, dto.routeStopIds);
   }

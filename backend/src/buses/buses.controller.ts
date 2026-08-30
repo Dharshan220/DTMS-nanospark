@@ -16,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { BusesService } from './buses.service';
 import {
@@ -38,8 +39,10 @@ export class BusesController {
   constructor(private readonly busesService: BusesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new bus', description: 'Registers a new bus in the system (admin only).' })
+  @ApiOperation({ summary: 'Create a new bus', description: 'Registers a new bus in the system. Admin only.' })
+  @ApiBody({ type: CreateBusDto })
   @ApiResponse({ status: 201, description: 'Bus created successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   create(
     @Body(
       new ValidationPipe({
@@ -80,9 +83,11 @@ export class BusesController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a bus', description: 'Updates bus details by ID.' })
+  @ApiOperation({ summary: 'Update a bus', description: 'Updates bus details by ID. Admin only.' })
   @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiBody({ type: UpdateBusDto })
   @ApiResponse({ status: 200, description: 'Bus updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   update(
     @Param('id') id: string,
     @Body(
@@ -98,17 +103,21 @@ export class BusesController {
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update bus status', description: 'Changes the operational status of a bus.' })
+  @ApiOperation({ summary: 'Update bus status', description: 'Changes the operational status of a bus. Admin only.' })
   @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiBody({ type: UpdateBusStatusDto })
   @ApiResponse({ status: 200, description: 'Bus status updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateBusStatusDto) {
     return this.busesService.updateStatus(id, dto.status as BusStatus);
   }
 
   @Patch(':id/driver')
-  @ApiOperation({ summary: 'Assign or remove driver', description: 'Assigns or removes a driver from a bus.' })
+  @ApiOperation({ summary: 'Assign or remove driver', description: 'Assigns or removes a driver from a bus. Admin only.' })
   @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiBody({ type: AssignDriverDto })
   @ApiResponse({ status: 200, description: 'Driver assignment updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   assignDriver(@Param('id') id: string, @Body() dto: AssignDriverDto) {
     return this.busesService.assignDriver(id, dto);
   }

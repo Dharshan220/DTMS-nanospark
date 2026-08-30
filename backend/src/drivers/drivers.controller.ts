@@ -15,6 +15,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { DriversService } from './drivers.service';
 import { CreateDriverDto, UpdateDriverDto, UpdateDriverStatusDto } from './dto/driver.dto';
@@ -32,8 +33,10 @@ export class DriversController {
   constructor(private readonly driversService: DriversService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new driver', description: 'Registers a new driver in the system (admin only).' })
+  @ApiOperation({ summary: 'Create a new driver', description: 'Registers a new driver in the system. Admin only.' })
+  @ApiBody({ type: CreateDriverDto })
   @ApiResponse({ status: 201, description: 'Driver created successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   create(@Body() dto: CreateDriverDto) {
     return this.driversService.create(dto);
   }
@@ -65,17 +68,21 @@ export class DriversController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a driver', description: 'Updates driver details by ID.' })
+  @ApiOperation({ summary: 'Update a driver', description: 'Updates driver details by ID. Admin only.' })
   @ApiParam({ name: 'id', description: 'Driver ID' })
+  @ApiBody({ type: UpdateDriverDto })
   @ApiResponse({ status: 200, description: 'Driver updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   update(@Param('id') id: string, @Body() dto: UpdateDriverDto) {
     return this.driversService.update(id, dto);
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update driver status', description: 'Changes the status of a driver.' })
+  @ApiOperation({ summary: 'Update driver status', description: 'Changes the status of a driver. Admin only.' })
   @ApiParam({ name: 'id', description: 'Driver ID' })
+  @ApiBody({ type: UpdateDriverStatusDto })
   @ApiResponse({ status: 200, description: 'Driver status updated successfully.' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateDriverStatusDto) {
     return this.driversService.updateStatus(id, dto.status as DriverStatus);
   }

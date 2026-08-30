@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { CreateAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,8 +21,10 @@ export class AttendanceController {
 
   @Post('faculty/attendance')
   @Roles(Role.FACULTY)
-  @ApiOperation({ summary: 'Create faculty attendance record' })
+  @ApiOperation({ summary: 'Create faculty attendance record', description: 'Records attendance for a faculty bus trip. Faculty only.' })
+  @ApiBody({ type: CreateAttendanceDto })
   @ApiResponse({ status: 201, description: 'Attendance record created' })
+  @ApiResponse({ status: 403, description: 'Forbidden: faculty access required' })
   createFacultyAttendance(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateAttendanceDto,
@@ -70,9 +72,11 @@ export class AttendanceController {
 
   @Patch('faculty/attendance/:id')
   @Roles(Role.FACULTY)
-  @ApiOperation({ summary: 'Update faculty attendance record' })
+  @ApiOperation({ summary: 'Update faculty attendance record', description: 'Updates an existing attendance record. Faculty only.' })
   @ApiParam({ name: 'id', description: 'Attendance record ID' })
+  @ApiBody({ type: UpdateAttendanceDto })
   @ApiResponse({ status: 200, description: 'Attendance record updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden: faculty access required' })
   updateFacultyAttendance(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -125,9 +129,11 @@ export class AttendanceController {
 
   @Patch('admin/attendance/:id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Update admin attendance record' })
+  @ApiOperation({ summary: 'Update admin attendance record', description: 'Updates an existing attendance record. Admin only.' })
   @ApiParam({ name: 'id', description: 'Attendance record ID' })
+  @ApiBody({ type: UpdateAttendanceDto })
   @ApiResponse({ status: 200, description: 'Attendance record updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden: admin access required' })
   updateAdminAttendance(
     @Param('id') id: string,
     @Body() dto: UpdateAttendanceDto,
