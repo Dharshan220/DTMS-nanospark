@@ -221,6 +221,20 @@ export class TransportAssignmentsService {
     return { message: 'Assignment deactivated' };
   }
 
+  // ─── Student/Faculty: My Transport (by userId) ──────────────
+
+  async getMyStudentTransport(userId: string) {
+    const student = await this.prisma.student.findUnique({ where: { userId } });
+    if (!student) return null;
+    return this.getStudentAssignment(student.id);
+  }
+
+  async getMyFacultyTransport(userId: string) {
+    const faculty = await this.prisma.faculty.findUnique({ where: { userId } });
+    if (!faculty) return null;
+    return this.getFacultyAssignment(faculty.id);
+  }
+
   // ─── Format Helpers ──────────────────────────────────────────
 
   private formatStudentAssignment(assignment: any) {

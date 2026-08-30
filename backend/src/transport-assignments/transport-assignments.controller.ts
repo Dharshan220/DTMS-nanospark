@@ -60,7 +60,7 @@ export class TransportAssignmentsController {
   @Get('student/transport')
   @Roles(Role.STUDENT)
   getMyTransport(@CurrentUser() user: CurrentUserPayload) {
-    return this.assignmentsService.getStudentAssignment(user.id);
+    return this.assignmentsService.getMyStudentTransport(user.id);
   }
 
   // ─── Faculty Transport (Admin) ──────────────────────────────
@@ -97,6 +97,6 @@ export class TransportAssignmentsController {
   @Get('faculty/transport')
   @Roles(Role.FACULTY)
   getMyFacultyTransport(@CurrentUser() user: CurrentUserPayload) {
-    return this.assignmentsService.getFacultyAssignment(user.id);
+    return this.assignmentsService.getMyFacultyTransport(user.id);
   }
 }

@@ -51,6 +51,12 @@ export class NotificationController {
     });
   }
 
+  @Patch('notifications/read-all')
+  @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
+  markAllAsRead(@CurrentUser() user: CurrentUserPayload) {
+    return this.notificationService.markAllAsRead(user.id);
+  }
+
   @Patch('notifications/:id/read')
   @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
   markAsRead(
@@ -58,12 +64,6 @@ export class NotificationController {
     @Param('id') id: string,
   ) {
     return this.notificationService.markAsRead(user.id, id);
-  }
-
-  @Patch('notifications/read-all')
-  @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
-  markAllAsRead(@CurrentUser() user: CurrentUserPayload) {
-    return this.notificationService.markAllAsRead(user.id);
   }
 
   // ─── Admin: Notification Management ────────────────────────
