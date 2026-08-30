@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { SchedulesService } from './schedules.service';
 import {
   CreateScheduleDto,
@@ -21,6 +22,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 
+@ApiTags('Schedules')
+@ApiBearerAuth('access-token')
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SchedulesController {
@@ -30,6 +33,8 @@ export class SchedulesController {
 
   @Post('admin/schedules')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Create a new schedule' })
+  @ApiResponse({ status: 201, description: 'Schedule created successfully' })
   createSchedule(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateScheduleDto,
@@ -39,18 +44,26 @@ export class SchedulesController {
 
   @Get('admin/schedules')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'List all schedules with filters' })
+  @ApiResponse({ status: 200, description: 'Schedules list retrieved' })
   listSchedules(@Query() query: ScheduleFilterDto) {
     return this.schedulesService.listSchedules(query);
   }
 
   @Get('admin/schedules/:id')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get schedule by ID' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 200, description: 'Schedule retrieved' })
   getScheduleById(@Param('id') id: string) {
     return this.schedulesService.getScheduleById(id);
   }
 
   @Patch('admin/schedules/:id')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update a schedule' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 200, description: 'Schedule updated successfully' })
   updateSchedule(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -61,6 +74,9 @@ export class SchedulesController {
 
   @Patch('admin/schedules/:id/cancel')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Cancel a schedule' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 200, description: 'Schedule cancelled' })
   cancelSchedule(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -70,12 +86,18 @@ export class SchedulesController {
 
   @Patch('admin/schedules/:id/activate')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Activate a schedule' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 200, description: 'Schedule activated' })
   activateSchedule(@Param('id') id: string) {
     return this.schedulesService.activateSchedule(id);
   }
 
   @Patch('admin/schedules/:id/deactivate')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Deactivate a schedule' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 200, description: 'Schedule deactivated' })
   deactivateSchedule(@Param('id') id: string) {
     return this.schedulesService.deactivateSchedule(id);
   }
@@ -84,6 +106,9 @@ export class SchedulesController {
 
   @Post('admin/schedules/:id/overrides')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Create a schedule override' })
+  @ApiParam({ name: 'id', description: 'Schedule ID' })
+  @ApiResponse({ status: 201, description: 'Override created successfully' })
   createOverride(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -96,12 +121,16 @@ export class SchedulesController {
 
   @Get('student/schedules/my')
   @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'Get my student schedule' })
+  @ApiResponse({ status: 200, description: 'Student schedule retrieved' })
   getMyStudentSchedule(@CurrentUser() user: CurrentUserPayload) {
     return this.schedulesService.getMySchedule(user.id, user.role);
   }
 
   @Get('faculty/schedules/my')
   @Roles(Role.FACULTY)
+  @ApiOperation({ summary: 'Get my faculty schedule' })
+  @ApiResponse({ status: 200, description: 'Faculty schedule retrieved' })
   getMyFacultySchedule(@CurrentUser() user: CurrentUserPayload) {
     return this.schedulesService.getMySchedule(user.id, user.role);
   }

@@ -11,6 +11,7 @@ import {
   Res,
   HttpCode,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { NotificationService } from './notification.service';
 import { TransportEventService } from './transport-event.service';
@@ -22,6 +23,8 @@ import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user
 import { Role } from '@prisma/client';
 import { Logger } from '@nestjs/common';
 
+@ApiTags('Notifications')
+@ApiBearerAuth('access-token')
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class NotificationController {
@@ -36,6 +39,12 @@ export class NotificationController {
 
   @Get('notifications')
   @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
+  @ApiOperation({ summary: 'Get user notifications' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (PENDING/SENT/DELIVERED/READ/FAILED)' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by notification type' })
+  @ApiResponse({ status: 200, description: 'User notifications retrieved' })
   getUserNotifications(
     @CurrentUser() user: CurrentUserPayload,
     @Query('page') page?: string,
@@ -53,12 +62,17 @@ export class NotificationController {
 
   @Patch('notifications/read-all')
   @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
+  @ApiOperation({ summary: 'Mark all notifications as read' })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   markAllAsRead(@CurrentUser() user: CurrentUserPayload) {
     return this.notificationService.markAllAsRead(user.id);
   }
 
   @Patch('notifications/:id/read')
   @Roles(Role.STUDENT, Role.FACULTY, Role.ADMIN)
+  @ApiOperation({ summary: 'Mark a notification as read' })
+  @ApiParam({ name: 'id', description: 'Notification ID' })
+  @ApiResponse({ status: 200, description: 'Notification marked as read' })
   markAsRead(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') id: string,
@@ -70,6 +84,16 @@ export class NotificationController {
 
   @Get('admin/notifications')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get admin notifications list' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
+  @ApiQuery({ name: 'channel', required: false, description: 'Filter by channel (WHATSAPP/IN_APP)' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by notification type' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by delivery status' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Filter start date' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Filter end date' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search keyword' })
+  @ApiResponse({ status: 200, description: 'Admin notifications retrieved' })
   getAdminNotifications(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -94,6 +118,8 @@ export class NotificationController {
 
   @Post('admin/notifications/announcement')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Create a transport announcement' })
+  @ApiResponse({ status: 201, description: 'Announcement created successfully' })
   createAnnouncement(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateAnnouncementDto,
@@ -114,6 +140,8 @@ export class NotificationController {
 
   @Post('admin/notifications/whatsapp/test')
   @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Send a test WhatsApp notification' })
+  @ApiResponse({ status: 200, description: 'Test notification sent' })
   async testWhatsApp(
     @Body('phoneNumber') phoneNumber: string,
   ) {

@@ -7,10 +7,12 @@ import {
   HttpCode,
   Logger,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { NotificationService } from './notification.service';
 import { ConfigService } from '@nestjs/config';
 
+@ApiTags('Webhooks')
 @Controller('webhooks')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
@@ -27,6 +29,8 @@ export class WebhookController {
   }
 
   @Get('whatsapp')
+  @ApiOperation({ summary: 'Verify WhatsApp webhook subscription' })
+  @ApiResponse({ status: 200, description: 'Webhook verified successfully' })
   verifyWebhook(
     @Req() req: Request,
     @Res() res: Response,
@@ -46,6 +50,8 @@ export class WebhookController {
 
   @Post('whatsapp')
   @HttpCode(200)
+  @ApiOperation({ summary: 'Handle incoming WhatsApp webhook events' })
+  @ApiResponse({ status: 200, description: 'Webhook processed successfully' })
   async handleWebhook(@Req() req: Request, @Res() res: Response) {
     try {
       const body = req.body;

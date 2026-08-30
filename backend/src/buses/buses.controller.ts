@@ -9,6 +9,14 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { BusesService } from './buses.service';
 import {
   CreateBusDto,
@@ -21,6 +29,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role, BusStatus } from '@prisma/client';
 
+@ApiTags('Buses')
+@ApiBearerAuth('access-token')
 @Controller('admin/buses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
@@ -28,6 +38,8 @@ export class BusesController {
   constructor(private readonly busesService: BusesService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create a new bus', description: 'Registers a new bus in the system (admin only).' })
+  @ApiResponse({ status: 201, description: 'Bus created successfully.' })
   create(
     @Body(
       new ValidationPipe({
@@ -42,6 +54,11 @@ export class BusesController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List all buses', description: 'Returns a paginated list of all buses.' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number for pagination' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Number of items per page' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term to filter buses' })
+  @ApiResponse({ status: 200, description: 'List of buses returned successfully.' })
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -55,11 +72,17 @@ export class BusesController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a bus by ID', description: 'Returns a single bus by its ID.' })
+  @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiResponse({ status: 200, description: 'Bus found and returned.' })
   findOne(@Param('id') id: string) {
     return this.busesService.findById(id);
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Update a bus', description: 'Updates bus details by ID.' })
+  @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiResponse({ status: 200, description: 'Bus updated successfully.' })
   update(
     @Param('id') id: string,
     @Body(
@@ -75,11 +98,17 @@ export class BusesController {
   }
 
   @Patch(':id/status')
+  @ApiOperation({ summary: 'Update bus status', description: 'Changes the operational status of a bus.' })
+  @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiResponse({ status: 200, description: 'Bus status updated successfully.' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateBusStatusDto) {
     return this.busesService.updateStatus(id, dto.status as BusStatus);
   }
 
   @Patch(':id/driver')
+  @ApiOperation({ summary: 'Assign or remove driver', description: 'Assigns or removes a driver from a bus.' })
+  @ApiParam({ name: 'id', description: 'Bus ID' })
+  @ApiResponse({ status: 200, description: 'Driver assignment updated successfully.' })
   assignDriver(@Param('id') id: string, @Body() dto: AssignDriverDto) {
     return this.busesService.assignDriver(id, dto);
   }
