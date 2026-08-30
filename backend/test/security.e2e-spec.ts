@@ -137,11 +137,9 @@ describe('Production Security (e2e)', () => {
     });
 
     it('should reject refresh without cookie', async () => {
-      const res = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post('/api/auth/refresh')
-        .expect(200);
-
-      expect(res.body.accessToken).toBeNull();
+        .expect(401);
     });
   });
 

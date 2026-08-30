@@ -107,13 +107,27 @@ export class AuthService {
     return secret;
   }
 
-  refreshTokens(refreshToken: string): AuthTokens {
+  async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     try {
       const secret = this.getRefreshTokenSecret();
       const payload = this.jwtService.verify(refreshToken, { secret });
 
-      return this.generateTokens(payload.sub, payload.role);
-    } catch {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, role: true, status: true },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      if (user.status === UserStatus.INACTIVE) {
+        throw new UnauthorizedException('Account is inactive');
+      }
+
+      return this.generateTokens(user.id, user.role);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

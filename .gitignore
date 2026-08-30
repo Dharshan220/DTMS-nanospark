@@ -3,9 +3,20 @@ dist/
 .vscode/
 *.log
 .env
+.env.*
+!.env.example
 
 # Backend
 backend/node_modules/
 backend/dist/
 backend/.env
 backend/prisma/migrations/
+
+# Build artifacts
+*.tsbuildinfo
+*.zip
+
+# Certificate files
+*.pem
+*.key
+*.cert

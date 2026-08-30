@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Res,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
@@ -44,7 +45,7 @@ export class AuthController {
     res.cookie('refresh_token', result.tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/',
     });
@@ -56,17 +57,19 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token', description: 'Use refresh token cookie to obtain a new access token.' })
   @ApiResponse({ status: 200, description: 'New access token returned' })
-  refresh(@Req() req: Request) {
+  @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
+  async refresh(@Req() req: Request) {
     const refreshToken = req.cookies?.refresh_token;
 
     if (!refreshToken) {
-      return { accessToken: null };
+      throw new UnauthorizedException('Missing refresh token');
     }
 
-    const tokens = this.authService.refreshTokens(refreshToken);
+    const tokens = await this.authService.refreshTokens(refreshToken);
     return { accessToken: tokens.accessToken };
   }
 

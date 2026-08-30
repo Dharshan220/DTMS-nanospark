@@ -42,6 +42,7 @@ export class CreateAttendanceDto {
   @ApiProperty({ description: 'Total passenger count (boys + girls)', example: 27, minimum: 0 })
   @IsNumber()
   @Min(0)
+  @Validate(PassengerCountValidator)
   totalCount: number;
 
   @ApiPropertyOptional({ description: 'Attendance date (YYYY-MM-DD)', example: '2026-08-30' })
