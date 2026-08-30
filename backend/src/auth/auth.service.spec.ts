@@ -4,12 +4,14 @@ import { PrismaService } from '../database/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let prismaMock: any;
   let jwtMock: any;
   let configMock: any;
+  let auditMock: any;
 
   beforeEach(async () => {
     prismaMock = {
@@ -37,12 +39,17 @@ describe('AuthService', () => {
       }),
     };
 
+    auditMock = {
+      createLog: jest.fn().mockResolvedValue({}),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: JwtService, useValue: jwtMock },
         { provide: ConfigService, useValue: configMock },
+        { provide: AuditService, useValue: auditMock },
       ],
     }).compile();
 

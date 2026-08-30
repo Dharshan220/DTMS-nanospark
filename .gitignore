@@ -20,3 +20,7 @@ backend/prisma/migrations/
 *.pem
 *.key
 *.cert
+
+# Load test results
+backend/load-tests/results/
+backend/load-tests/*.json

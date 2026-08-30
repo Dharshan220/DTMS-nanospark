@@ -162,17 +162,26 @@ export class NotificationService {
     eventType?: string;
     entityId?: string;
   }): Promise<{ created: number; skipped: number }> {
+    if (params.userIds.length === 0) {
+      return { created: 0, skipped: 0 };
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: params.userIds } },
+      include: {
+        student: { select: { id: true, phone: true } },
+        faculty: { select: { id: true, phone: true } },
+      },
+    });
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
     let created = 0;
     let skipped = 0;
 
+    const inAppNotifications: { userId: string }[] = [];
+
     for (const userId of params.userIds) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        include: {
-          student: { select: { id: true, phone: true } },
-          faculty: { select: { id: true, phone: true } },
-        },
-      });
+      const user = userMap.get(userId);
 
       if (!user) {
         skipped++;
@@ -182,18 +191,12 @@ export class NotificationService {
       const phone = user.student?.phone || user.faculty?.phone;
 
       if (!phone) {
-        await this.sendNotification({
-          userId,
-          type: params.type,
-          channel: NotificationChannel.IN_APP,
-          title: params.title,
-          message: params.message,
-        });
+        inAppNotifications.push({ userId });
         skipped++;
         continue;
       }
 
-      await this.sendNotification({
+      this.sendNotification({
         userId,
         type: params.type,
         channel: params.channel,
@@ -202,8 +205,21 @@ export class NotificationService {
         phone,
         templateName: params.templateName,
         templateParams: params.templateParams,
-      });
+      }).catch(() => {});
       created++;
+    }
+
+    if (inAppNotifications.length > 0) {
+      await this.prisma.notification.createMany({
+        data: inAppNotifications.map((n) => ({
+          userId: n.userId,
+          type: params.type,
+          channel: NotificationChannel.IN_APP,
+          title: params.title,
+          message: params.message,
+          status: NotificationStatus.PENDING,
+        })),
+      });
     }
 
     this.logger.log(
