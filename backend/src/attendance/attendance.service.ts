@@ -7,14 +7,18 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
-import { Prisma, TripType } from '@prisma/client';
+import { Prisma, TripType, AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Faculty: Create/Update Attendance ──────────────────────
 

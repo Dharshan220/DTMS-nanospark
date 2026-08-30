@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateFacultyDto, UpdateFacultyDto } from './dto/faculty.dto';
-import { Prisma, Role, UserStatus } from '@prisma/client';
+import { Prisma, Role, UserStatus, AuditAction } from '@prisma/client';
 
 @Injectable()
 export class FacultyService {
@@ -16,6 +17,7 @@ export class FacultyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(dto: CreateFacultyDto) {
@@ -60,6 +62,16 @@ export class FacultyService {
     });
 
     this.logger.log(`Faculty created: ${dto.email}`);
+
+    await this.auditService.createLog({
+      userId: result.user.id,
+      userRole: Role.ADMIN,
+      action: AuditAction.ENTITY_CREATE,
+      resource: 'Faculty',
+      resourceId: result.faculty.id,
+      description: `Faculty created: ${dto.name} (${dto.facultyId})`,
+      metadata: { email: dto.email, facultyId: dto.facultyId, name: dto.name },
+    });
 
     return this.formatResponse(result.user, result.faculty);
   }
@@ -134,7 +146,7 @@ export class FacultyService {
     return this.formatResponse(faculty.user, faculty);
   }
 
-  async updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE') {
+  async updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE', adminUserId?: string) {
     const existing = await this.prisma.faculty.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Faculty not found');
@@ -149,6 +161,18 @@ export class FacultyService {
       where: { id },
       include: { user: { select: { id: true, email: true, status: true } } },
     });
+
+    if (adminUserId) {
+      await this.auditService.createLog({
+        userId: adminUserId,
+        userRole: Role.ADMIN,
+        action: AuditAction.STATUS_CHANGE,
+        resource: 'Faculty',
+        resourceId: id,
+        description: `Faculty status changed to ${status}`,
+        metadata: { previousStatus: existing.status, newStatus: status },
+      });
+    }
 
     return this.formatResponse(faculty!.user, faculty!);
   }

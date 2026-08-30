@@ -170,6 +170,30 @@ enum TransportNotificationTarget {
   SPECIFIC_FACULTY
 }
 
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  ENTITY_CREATE
+  ENTITY_UPDATE
+  STATUS_CHANGE
+  ASSIGNMENT_CREATE
+  ASSIGNMENT_DEACTIVATE
+  EMERGENCY_CREATE
+  EMERGENCY_ACKNOWLEDGE
+  EMERGENCY_RESOLVE
+  EMERGENCY_CANCEL
+  SCHEDULE_CREATE
+  SCHEDULE_UPDATE
+  SCHEDULE_CANCEL
+  SCHEDULE_OVERRIDE
+  ATTENDANCE_CREATE
+  ATTENDANCE_UPDATE
+  NOTIFICATION_SEND
+  NOTIFICATION_BULK_SEND
+  COMPLAINT_STATUS_CHANGE
+  FEEDBACK_STATUS_CHANGE
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
@@ -612,4 +636,28 @@ model ScheduleOverride {
   @@index([replacementBusId])
   @@index([status])
   @@map("schedule_overrides")
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  userRole    Role        @map("user_role")
+  userName    String?     @map("user_name")
+  action      AuditAction
+  resource    String
+  resourceId  String?     @map("resource_id")
+  description String?
+  metadata    Json?
+  ipAddress   String?     @map("ip_address")
+  endpoint    String?
+  httpMethod  String?     @map("http_method")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([resourceId])
+  @@index([createdAt])
+  @@index([userRole])
+  @@map("audit_logs")
 }

@@ -7,7 +7,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../database/prisma.service';
-import { UserStatus } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
+import { UserStatus, AuditAction, Role } from '@prisma/client';
 
 export interface TokenPayload {
   sub: string;
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
   async login(email: string, password: string): Promise<{ user: SafeUser; tokens: AuthTokens }> {
@@ -65,6 +67,16 @@ export class AuthService {
     const tokens = this.generateTokens(user.id, user.role);
 
     this.logger.log(`User ${user.email} logged in successfully`);
+
+    await this.auditService.createLog({
+      userId: user.id,
+      userRole: user.role as Role,
+      userName: user.email,
+      action: AuditAction.LOGIN,
+      resource: 'User',
+      resourceId: user.id,
+      description: `User ${user.email} logged in`,
+    });
 
     return {
       user: {

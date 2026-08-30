@@ -13,6 +13,7 @@ import { CreateFacultyDto, UpdateFacultyDto, UpdateFacultyStatusDto } from './dt
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('admin/faculty')
@@ -50,7 +51,11 @@ export class FacultyController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateFacultyStatusDto) {
-    return this.facultyService.updateStatus(id, dto.status as 'ACTIVE' | 'INACTIVE');
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateFacultyStatusDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.facultyService.updateStatus(id, dto.status as 'ACTIVE' | 'INACTIVE', user.id);
   }
 }

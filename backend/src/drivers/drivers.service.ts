@@ -5,14 +5,18 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateDriverDto, UpdateDriverDto } from './dto/driver.dto';
-import { Prisma, DriverStatus } from '@prisma/client';
+import { Prisma, DriverStatus, AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class DriversService {
   private readonly logger = new Logger(DriversService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async create(dto: CreateDriverDto) {
     const existingCode = await this.prisma.driver.findUnique({
@@ -44,6 +48,16 @@ export class DriversService {
     });
 
     this.logger.log(`Driver created: ${dto.driverCode}`);
+
+    await this.auditService.createLog({
+      userId: 'system',
+      userRole: Role.ADMIN,
+      action: AuditAction.ENTITY_CREATE,
+      resource: 'Driver',
+      resourceId: driver.id,
+      description: `Driver created: ${dto.name} (${dto.driverCode})`,
+      metadata: { driverCode: dto.driverCode, name: dto.name, licenseNumber: dto.licenseNumber },
+    });
 
     return this.formatResponse(driver);
   }

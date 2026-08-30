@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateStudentDto, UpdateStudentDto } from './dto/student.dto';
-import { Prisma, Role, UserStatus } from '@prisma/client';
+import { Prisma, Role, UserStatus, AuditAction } from '@prisma/client';
 
 @Injectable()
 export class StudentsService {
@@ -16,6 +17,7 @@ export class StudentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(dto: CreateStudentDto) {
@@ -62,6 +64,16 @@ export class StudentsService {
     });
 
     this.logger.log(`Student created: ${dto.email}`);
+
+    await this.auditService.createLog({
+      userId: result.user.id,
+      userRole: Role.ADMIN,
+      action: AuditAction.ENTITY_CREATE,
+      resource: 'Student',
+      resourceId: result.student.id,
+      description: `Student created: ${dto.name} (${dto.registerNumber})`,
+      metadata: { email: dto.email, registerNumber: dto.registerNumber, name: dto.name },
+    });
 
     return this.formatResponse(result.user, result.student);
   }
@@ -138,7 +150,7 @@ export class StudentsService {
     return this.formatResponse(student.user, student);
   }
 
-  async updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE') {
+  async updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE', adminUserId?: string) {
     const existing = await this.prisma.student.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Student not found');
@@ -153,6 +165,18 @@ export class StudentsService {
       where: { id },
       include: { user: { select: { id: true, email: true, status: true } } },
     });
+
+    if (adminUserId) {
+      await this.auditService.createLog({
+        userId: adminUserId,
+        userRole: Role.ADMIN,
+        action: AuditAction.STATUS_CHANGE,
+        resource: 'Student',
+        resourceId: id,
+        description: `Student status changed to ${status}`,
+        metadata: { previousStatus: existing.status, newStatus: status },
+      });
+    }
 
     return this.formatResponse(student!.user, student!);
   }

@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { TransportEventService } from '../notifications/transport-event.service';
 import {
   CreateScheduleDto,
@@ -19,6 +20,8 @@ import {
   TripType,
   Prisma,
   TransportEventType,
+  AuditAction,
+  Role,
 } from '@prisma/client';
 
 @Injectable()
@@ -27,6 +30,7 @@ export class SchedulesService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
     private readonly transportEventService: TransportEventService,
   ) {}
 
@@ -71,6 +75,21 @@ export class SchedulesService {
     });
 
     this.logger.log(`Schedule created: ${schedule.id} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.SCHEDULE_CREATE,
+      resource: 'TransportSchedule',
+      resourceId: schedule.id,
+      description: `Schedule created: Bus ${schedule.bus.busNumber}, Route ${schedule.route.routeCode}`,
+      metadata: {
+        busId: dto.busId,
+        routeId: dto.routeId,
+        tripType: dto.tripType,
+        departureTime: dto.departureTime,
+      },
+    });
 
     await this.emitNotificationEvent({
       eventType: TransportEventType.SCHEDULE_CREATED,
@@ -256,6 +275,20 @@ export class SchedulesService {
     });
 
     this.logger.log(`Schedule cancelled: ${scheduleId} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.SCHEDULE_CANCEL,
+      resource: 'TransportSchedule',
+      resourceId: scheduleId,
+      description: `Schedule cancelled`,
+      metadata: {
+        busId: existing.busId,
+        routeId: existing.routeId,
+        tripType: existing.tripType,
+      },
+    });
 
     await this.emitNotificationEvent({
       eventType: TransportEventType.TRIP_CANCELLED,

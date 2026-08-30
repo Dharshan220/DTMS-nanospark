@@ -51,7 +51,11 @@ export class StudentsController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateStudentStatusDto) {
-    return this.studentsService.updateStatus(id, dto.status as 'ACTIVE' | 'INACTIVE');
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateStudentStatusDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.studentsService.updateStatus(id, dto.status as 'ACTIVE' | 'INACTIVE', user.id);
   }
 }

@@ -5,14 +5,18 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateFeedbackDto, UpdateFeedbackDto } from './dto/feedback.dto';
-import { FeedbackCategory, FeedbackStatus, Prisma } from '@prisma/client';
+import { FeedbackCategory, FeedbackStatus, Prisma, AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class FeedbackService {
   private readonly logger = new Logger(FeedbackService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Student: Create Feedback ──────────────────────────────
 
@@ -192,6 +196,20 @@ export class FeedbackService {
     });
 
     this.logger.log(`Feedback updated: ${feedbackId} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.FEEDBACK_STATUS_CHANGE,
+      resource: 'Feedback',
+      resourceId: feedbackId,
+      description: `Feedback status changed to ${dto.status || existing.status}`,
+      metadata: {
+        previousStatus: existing.status,
+        newStatus: dto.status || existing.status,
+      },
+    });
+
     return this.formatFeedbackResponse(updated, true);
   }
 

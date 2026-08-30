@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { NotificationProviderService } from './providers/notification.provider';
 import {
   NotificationChannel,
   NotificationStatus,
   NotificationType,
   Prisma,
+  AuditAction,
+  Role,
 } from '@prisma/client';
 
 @Injectable()
@@ -14,6 +17,7 @@ export class NotificationService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
     private readonly provider: NotificationProviderService,
   ) {}
 

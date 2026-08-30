@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateEmergencyDto, ResolveEmergencyDto } from './dto/emergency.dto';
 import {
   EmergencyType,
@@ -14,13 +15,17 @@ import {
   EmergencyStatus,
   Role,
   Prisma,
+  AuditAction,
 } from '@prisma/client';
 
 @Injectable()
 export class EmergencyService {
   private readonly logger = new Logger(EmergencyService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Create Emergency (Student/Faculty) ────────────────────
 
@@ -360,6 +365,17 @@ export class EmergencyService {
     });
 
     this.logger.log(`Emergency acknowledged: ${emergencyId} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.EMERGENCY_ACKNOWLEDGE,
+      resource: 'EmergencyAlert',
+      resourceId: emergencyId,
+      description: `Emergency alert acknowledged`,
+      metadata: { type: existing.type, priority: existing.priority },
+    });
+
     return this.formatAdminResponse(updated);
   }
 
@@ -394,6 +410,21 @@ export class EmergencyService {
     });
 
     this.logger.log(`Emergency resolved: ${emergencyId} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.EMERGENCY_RESOLVE,
+      resource: 'EmergencyAlert',
+      resourceId: emergencyId,
+      description: `Emergency alert resolved`,
+      metadata: {
+        type: existing.type,
+        priority: existing.priority,
+        resolutionNote: dto.resolutionNote,
+      },
+    });
+
     return this.formatAdminResponse(updated);
   }
 

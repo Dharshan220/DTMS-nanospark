@@ -5,14 +5,18 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateRouteDto, UpdateRouteDto } from './dto/route.dto';
-import { Prisma, EntityStatus } from '@prisma/client';
+import { Prisma, EntityStatus, AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class RoutesService {
   private readonly logger = new Logger(RoutesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async create(dto: CreateRouteDto) {
     const existing = await this.prisma.route.findUnique({
@@ -37,6 +41,17 @@ export class RoutesService {
     });
 
     this.logger.log(`Route created: ${dto.routeCode}`);
+
+    await this.auditService.createLog({
+      userId: 'system',
+      userRole: Role.ADMIN,
+      action: AuditAction.ENTITY_CREATE,
+      resource: 'Route',
+      resourceId: route.id,
+      description: `Route created: ${dto.routeName} (${dto.routeCode})`,
+      metadata: { routeCode: dto.routeCode, routeName: dto.routeName },
+    });
+
     return this.formatResponse(route);
   }
 

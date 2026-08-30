@@ -2,17 +2,22 @@ import {
   Injectable, ConflictException, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import {
   AssignStudentBusDto, UpdateStudentAssignmentDto,
   AssignFacultyBusDto, UpdateFacultyAssignmentDto,
   AssignBusRouteDto,
 } from './dto/assignment.dto';
+import { AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class TransportAssignmentsService {
   private readonly logger = new Logger(TransportAssignmentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Bus ↔ Route Assignment ──────────────────────────────────
 

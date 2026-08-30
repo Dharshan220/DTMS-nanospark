@@ -2,14 +2,18 @@ import {
   Injectable, ConflictException, NotFoundException, Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateBusStopDto, UpdateBusStopDto } from './dto/bus-stop.dto';
-import { Prisma, EntityStatus } from '@prisma/client';
+import { Prisma, EntityStatus, AuditAction, Role } from '@prisma/client';
 
 @Injectable()
 export class BusStopsService {
   private readonly logger = new Logger(BusStopsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async create(dto: CreateBusStopDto) {
     const existing = await this.prisma.busStop.findUnique({
@@ -28,6 +32,17 @@ export class BusStopsService {
     });
 
     this.logger.log(`Bus stop created: ${dto.stopCode}`);
+
+    await this.auditService.createLog({
+      userId: 'system',
+      userRole: Role.ADMIN,
+      action: AuditAction.ENTITY_CREATE,
+      resource: 'BusStop',
+      resourceId: stop.id,
+      description: `Bus stop created: ${dto.name} (${dto.stopCode})`,
+      metadata: { stopCode: dto.stopCode, name: dto.name },
+    });
+
     return stop;
   }
 

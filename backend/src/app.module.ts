@@ -19,6 +19,7 @@ import { EmergencyModule } from './emergency/emergency.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     NotificationsModule,
     SchedulesModule,
     AnalyticsModule,
+    AuditModule,
     HealthModule,
   ],
 })

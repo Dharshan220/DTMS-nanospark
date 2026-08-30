@@ -6,19 +6,25 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateComplaintDto, UpdateComplaintDto } from './dto/complaints.dto';
 import {
   ComplaintCategory,
   ComplaintPriority,
   ComplaintStatus,
   Prisma,
+  AuditAction,
+  Role,
 } from '@prisma/client';
 
 @Injectable()
 export class ComplaintsService {
   private readonly logger = new Logger(ComplaintsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Student: Create Complaint ─────────────────────────────
 
@@ -250,6 +256,21 @@ export class ComplaintsService {
     });
 
     this.logger.log(`Complaint updated: ${complaintId} by admin ${adminUserId}`);
+
+    await this.auditService.createLog({
+      userId: adminUserId,
+      userRole: Role.ADMIN,
+      action: AuditAction.COMPLAINT_STATUS_CHANGE,
+      resource: 'Complaint',
+      resourceId: complaintId,
+      description: `Complaint status changed to ${dto.status || existing.status}`,
+      metadata: {
+        previousStatus: existing.status,
+        newStatus: dto.status || existing.status,
+        resolutionNote: dto.resolutionNote,
+      },
+    });
+
     return this.formatComplaintResponse(updated, true);
   }
 
